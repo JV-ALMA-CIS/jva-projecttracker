@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "331812083332",
+    "project_id": "jva-projecttracker",
+    "storage_bucket": "jva-projecttracker.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:331812083332:android:e9eac1ab5909c5936154d1",
+        "android_client_info": {
+          "package_name": "com.jva.jva_projecttracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAia23Zxmqm7vhh0N01qYytFuEEWp0OL14"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "functions",
+  "description": "JVA Project Tracker Cloud Functions - contract discovery and fit scoring via Gemini + Google Search grounding",
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "scripts": {
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "@google/genai": "^1.9.0",
+    "firebase-admin": "^13.10.0",
+    "firebase-functions": "^6.0.1"
+  },
+  "private": true
+}

@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Internal tool: any authenticated JVA staff account may read/write.
+    match /projects/{projectId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /applications/{applicationId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /contracts/{contractId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

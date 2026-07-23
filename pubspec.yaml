@@ -1,0 +1,44 @@
+name: jva_projecttracker
+description: "JVA project & contract tracker: internal project registry, application catalog, and AI-assisted contract discovery/fit scoring."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Core Flutter/UI packages
+  cupertino_icons: ^1.0.8
+  google_fonts: ^8.1.0
+  fl_chart: ^1.1.1
+
+  # Firebase
+  firebase_core: ^4.6.0
+  firebase_auth: ^6.1.0
+  cloud_firestore: ^6.0.2
+  firebase_storage: ^13.0.2
+  cloud_functions: ^6.1.0
+
+  # State management
+  flutter_riverpod: ^3.3.2
+
+  # Utilities
+  http: ^1.3.0
+  url_launcher: ^6.3.1
+  intl: ^0.20.2
+  uuid: ^4.5.1
+  logger: ^2.5.0
+  fluttertoast: ^9.0.0
+  connectivity_plus: ^7.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
