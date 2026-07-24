@@ -66,13 +66,22 @@ exports.discoverApplicationAreas = onCall(async (request) => {
   const { name, description } = request.data || {};
   if (!name) throw new HttpsError("invalid-argument", "name is required");
 
+  const profile = await buildCompanyProfile();
   const ai = genAiClient();
-  const prompt = `You are a market research assistant. Using web search, find real-world
-application areas / industries / use cases for a software system called "${name}".
+  const prompt = `You are a market research assistant for a software company with this track record:
+
+${profile}
+
+Using web search, find real-world application areas / industries / use cases
+for a new software system called "${name}".
 Description: ${description || "(none provided)"}
 
-Return ONLY a JSON object of the form {"areas": ["area 1", "area 2", ...]}
-with 5-10 concise application areas (2-6 words each). No commentary, no markdown fences.`;
+For each area, briefly explain why it fits (1-2 sentences), grounded in web
+search findings and, where relevant, the company's existing experience above.
+
+Return ONLY a JSON object of the form
+{"areas": [{"area": "area name", "reasoning": "why it fits"}, ...]}
+with 5-8 entries (area names 2-6 words each). No commentary, no markdown fences.`;
 
   const response = await ai.models.generateContent({
     model: GEMINI_MODEL,
@@ -89,7 +98,12 @@ with 5-10 concise application areas (2-6 words each). No commentary, no markdown
     throw new HttpsError("internal", "Model did not return parseable JSON");
   }
 
-  return { areas: Array.isArray(parsed.areas) ? parsed.areas : [] };
+  const rawAreas = Array.isArray(parsed.areas) ? parsed.areas : [];
+  const areas = rawAreas
+    .filter((a) => a && a.area)
+    .map((a) => ({ area: String(a.area), reasoning: String(a.reasoning || "") }));
+
+  return { areas };
 });
 
 /**

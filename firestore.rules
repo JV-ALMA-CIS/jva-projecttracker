@@ -5,6 +5,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Clients create their own profile at sign-up, always as role "user" —
+    // promotion to "admin" is done by hand in the Firebase console (Admin SDK
+    // and the console both bypass these rules), never by the client itself.
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == userId
+        && request.resource.data.role == 'user';
+      allow update, delete: if false;
+    }
+
     // Internal tool: any authenticated JVA staff account may read/write.
     match /projects/{projectId} {
       allow read, write: if isAuthenticated();

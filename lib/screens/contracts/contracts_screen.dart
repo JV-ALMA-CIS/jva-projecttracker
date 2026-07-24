@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/models/contract.dart';
 import 'package:jva_projecttracker/services/providers.dart';
+import 'package:jva_projecttracker/widgets/fit_score_badge.dart';
 import 'package:logger/logger.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -99,24 +100,12 @@ class _ContractTile extends ConsumerWidget {
 
   final Contract contract;
 
-  Color _fitColor() {
-    if (contract.fitScorePercent >= 70) return Colors.green;
-    if (contract.fitScorePercent >= 40) return Colors.orange;
-    return Colors.red;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: _fitColor().withValues(alpha: 0.15),
-          child: Text(
-            '${contract.fitScorePercent}',
-            style: TextStyle(color: _fitColor(), fontSize: 12),
-          ),
-        ),
+        leading: FitScoreBadge(percent: contract.fitScorePercent, size: 36),
         title: Text(contract.title),
         subtitle: Text(
           contract.client ?? contract.sourceUrl,

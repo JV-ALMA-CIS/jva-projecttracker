@@ -17,6 +17,28 @@ extension ApplicationStatusX on ApplicationStatus {
   }
 }
 
+/// A single AI-suggested market/usability area for an application, returned
+/// transiently by the `discoverApplicationAreas` Cloud Function. Only the
+/// `area` string is ever persisted (as an entry in
+/// [CompanyApplication.applicationAreas]) — `reasoning` exists purely to
+/// help the user decide whether to accept the suggestion.
+class ApplicationAreaSuggestion {
+  final String area;
+  final String reasoning;
+
+  const ApplicationAreaSuggestion({
+    required this.area,
+    required this.reasoning,
+  });
+
+  factory ApplicationAreaSuggestion.fromMap(Map<String, dynamic> map) {
+    return ApplicationAreaSuggestion(
+      area: map['area'] as String? ?? '',
+      reasoning: map['reasoning'] as String? ?? '',
+    );
+  }
+}
+
 /// A company-developed application/system (e.g. coffeecore, almahub).
 class CompanyApplication {
   final String id;

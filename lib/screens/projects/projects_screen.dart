@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:jva_projecttracker/models/project.dart';
 import 'package:jva_projecttracker/screens/projects/project_form_screen.dart';
 import 'package:jva_projecttracker/services/providers.dart';
+import 'package:jva_projecttracker/widgets/adaptive_list_grid.dart';
+import 'package:jva_projecttracker/widgets/project_card.dart';
 
 class ProjectsScreen extends ConsumerWidget {
   const ProjectsScreen({super.key});
@@ -26,21 +27,16 @@ class ProjectsScreen extends ConsumerWidget {
               child: Text('No projects yet. Tap + to add one.'),
             );
           }
-          return ListView.builder(
-            itemCount: list.length,
-            itemBuilder: (context, i) {
-              final p = list[i];
-              return ListTile(
-                leading: CircleAvatar(child: Text(p.status.label[0])),
-                title: Text(p.name),
-                subtitle: Text('${p.client} · ${p.status.label}'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ProjectFormScreen(project: p),
-                  ),
+          return AdaptiveListGrid(
+            items: list,
+            itemBuilder: (context, p) => ProjectCard(
+              project: p,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ProjectFormScreen(projectId: p.id),
                 ),
-              );
-            },
+              ),
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),

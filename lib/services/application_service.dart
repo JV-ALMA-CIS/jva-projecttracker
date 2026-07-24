@@ -21,6 +21,17 @@ class ApplicationService {
         );
   }
 
+  Stream<CompanyApplication?> watchById(String id) {
+    return _collection
+        .doc(id)
+        .snapshots()
+        .map(
+          (doc) => doc.exists
+              ? CompanyApplication.fromMap(doc.id, doc.data()!)
+              : null,
+        );
+  }
+
   Future<CompanyApplication?> getById(String id) async {
     final doc = await _collection.doc(id).get();
     if (!doc.exists) return null;

@@ -33,6 +33,13 @@ class ProjectService {
         );
   }
 
+  Stream<Project?> watchById(String id) {
+    return _collection
+        .doc(id)
+        .snapshots()
+        .map((doc) => doc.exists ? Project.fromMap(doc.id, doc.data()!) : null);
+  }
+
   Future<Project?> getById(String id) async {
     final doc = await _collection.doc(id).get();
     if (!doc.exists) return null;
