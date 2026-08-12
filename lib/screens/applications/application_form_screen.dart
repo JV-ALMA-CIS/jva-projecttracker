@@ -1,8 +1,10 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/models/application.dart';
 import 'package:jva_projecttracker/services/providers.dart';
+import 'package:jva_projecttracker/widgets/adaptive_form_row.dart';
 import 'package:jva_projecttracker/widgets/section_header.dart';
 import 'package:logger/logger.dart';
 
@@ -154,9 +156,10 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
     } catch (e) {
       _log.e('discoverApplicationAreas failed', error: e);
       if (mounted) {
+        final strings = ref.read(appStringsProvider);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Discovery failed: $e')));
+        ).showSnackBar(SnackBar(content: Text(strings.discoveryFailed(e))));
       }
     } finally {
       if (mounted) setState(() => _discovering = false);
@@ -190,46 +193,56 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
     }
 
     final isLoading = _isEditing && !_initialized;
+    final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit Application' : 'New Application'),
+        title: Text(
+          _isEditing
+              ? strings.editApplicationTitle
+              : strings.newApplicationTitle,
+        ),
         actions: [
           if (_isEditing)
             IconButton(
               onPressed: _delete,
               icon: const Icon(Icons.delete_outline),
+              tooltip: strings.deleteTooltip,
             ),
         ],
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _buildForm(context),
+          : _buildForm(context, strings),
     );
   }
 
-  Widget _buildForm(BuildContext context) {
+  Widget _buildForm(BuildContext context, AppStrings strings) {
     return Form(
       key: _formKey,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const SectionHeader(title: 'Details'),
+          SectionHeader(title: strings.sectionDetails),
           TextFormField(
             controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Application name'),
-            validator: (v) =>
-                (v == null || v.trim().isEmpty) ? 'Required' : null,
+            autofocus: !_isEditing,
+            decoration: InputDecoration(
+              labelText: strings.fieldApplicationName,
+            ),
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? strings.requiredValidator
+                : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _descriptionController,
-            decoration: const InputDecoration(labelText: 'Description'),
+            decoration: InputDecoration(labelText: strings.fieldDescription),
             maxLines: 4,
           ),
           const SizedBox(height: 24),
           SectionHeader(
-            title: 'Market & usability discovery',
+            title: strings.sectionMarketDiscovery,
             trailing: TextButton.icon(
               onPressed: _discovering ? null : _discoverApplicationAreas,
               icon: _discovering
@@ -239,13 +252,11 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.travel_explore_outlined, size: 18),
-              label: const Text('Discover'),
+              label: Text(strings.discoverButton),
             ),
           ),
           Text(
-            'Suggests real-world market/usability fields for this app, '
-            'grounded in web search and the company\'s own project & '
-            'application history.',
+            strings.discoveryCaption,
             style: Theme.of(context).textTheme.bodySmall,
           ),
           if (_suggestions.isNotEmpty) ...[
@@ -257,12 +268,12 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
                   subtitle: s.reasoning.isEmpty ? null : Text(s.reasoning),
                   leading: IconButton(
                     icon: const Icon(Icons.add_circle_outline),
-                    tooltip: 'Accept',
+                    tooltip: strings.acceptTooltip,
                     onPressed: () => _acceptSuggestion(s),
                   ),
                   trailing: IconButton(
                     icon: const Icon(Icons.close),
-                    tooltip: 'Dismiss',
+                    tooltip: strings.dismissTooltip,
                     onPressed: () => _rejectSuggestion(s),
                   ),
                 ),
@@ -272,7 +283,7 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
           if (_applicationAreas.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
-              'Selected areas',
+              strings.selectedAreasLabel,
               style: Theme.of(context).textTheme.labelLarge,
             ),
             const SizedBox(height: 8),
@@ -291,36 +302,40 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
             ),
           ],
           const SizedBox(height: 24),
-          const SectionHeader(title: 'Platform & technology'),
-          TextFormField(
-            controller: _platformsController,
-            decoration: const InputDecoration(
-              labelText: 'Platforms (comma separated)',
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _techStackController,
-            decoration: const InputDecoration(
-              labelText: 'Tech stack (comma separated)',
-            ),
+          SectionHeader(title: strings.sectionPlatformTech),
+          AdaptiveFieldRow(
+            children: [
+              TextFormField(
+                controller: _platformsController,
+                decoration: InputDecoration(labelText: strings.fieldPlatforms),
+              ),
+              TextFormField(
+                controller: _techStackController,
+                decoration: InputDecoration(labelText: strings.fieldTechStack),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _repoUrlController,
-            decoration: const InputDecoration(labelText: 'Repo URL'),
+            decoration: InputDecoration(labelText: strings.fieldRepoUrl),
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _liveUrlController,
-            decoration: const InputDecoration(labelText: 'Live URL'),
+            decoration: InputDecoration(labelText: strings.fieldLiveUrl),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<ApplicationStatus>(
             initialValue: _status,
-            decoration: const InputDecoration(labelText: 'Status'),
+            decoration: InputDecoration(labelText: strings.fieldStatus),
             items: ApplicationStatus.values
-                .map((s) => DropdownMenuItem(value: s, child: Text(s.label)))
+                .map(
+                  (s) => DropdownMenuItem(
+                    value: s,
+                    child: Text(strings.applicationStatusLabel(s)),
+                  ),
+                )
                 .toList(),
             onChanged: (v) => setState(() => _status = v ?? _status),
           ),
@@ -333,7 +348,7 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
                     width: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save'),
+                : Text(strings.saveButton),
           ),
         ],
       ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// The single canonical color-threshold function for contract fit scores.
-/// `Contract.fitScorePercent` is the only real, AI-produced percentage in the
+/// The single canonical color-threshold function for opportunity fit scores.
+/// `Opportunity.fitScorePercent` is the only real, AI-produced percentage in the
 /// app — this function must not be duplicated elsewhere.
 Color fitScoreColor(int percent) {
   if (percent >= 70) return Colors.green;
@@ -9,7 +9,7 @@ Color fitScoreColor(int percent) {
   return Colors.red;
 }
 
-/// Renders a contract's fit score. This is the **only** widget in the app
+/// Renders an opportunity's fit score. This is the **only** widget in the app
 /// that displays a percentage — never introduce a progress/percentage
 /// indicator anywhere else (there is no real data source for one).
 class FitScoreBadge extends StatelessWidget {

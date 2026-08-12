@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@google-cloud/secret-manager": "^6.3.0",
+    "cheerio": "^1.2.0",
+    "rss-parser": "^3.13.0"
+  }
+}

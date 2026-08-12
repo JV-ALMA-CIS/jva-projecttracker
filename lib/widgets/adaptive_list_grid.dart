@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
+import 'package:jva_projecttracker/widgets/fade_slide_in.dart';
 
 /// Renders [items] as a single-column list on narrow screens, and a grid
 /// once there's enough width for more than one tile. This is the single
@@ -32,7 +33,8 @@ class AdaptiveListGrid<T> extends StatelessWidget {
             padding: const EdgeInsets.all(AppSpacing.lg),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-            itemBuilder: (context, i) => itemBuilder(context, items[i]),
+            itemBuilder: (context, i) =>
+                FadeSlideIn(index: i, child: itemBuilder(context, items[i])),
           );
         }
 
@@ -45,7 +47,8 @@ class AdaptiveListGrid<T> extends StatelessWidget {
             crossAxisSpacing: AppSpacing.md,
             mainAxisSpacing: AppSpacing.md,
           ),
-          itemBuilder: (context, i) => itemBuilder(context, items[i]),
+          itemBuilder: (context, i) =>
+              FadeSlideIn(index: i, child: itemBuilder(context, items[i])),
         );
       },
     );

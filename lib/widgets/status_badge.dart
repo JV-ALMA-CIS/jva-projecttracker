@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
 
 /// A colored pill used to render any status/category label (project status,
-/// application status, contract status, category tags). Purely a label —
+/// application status, opportunity status, category tags). Purely a label —
 /// never used to render a percentage; see [FitScoreBadge] for that.
 class StatusBadge extends StatelessWidget {
   const StatusBadge({

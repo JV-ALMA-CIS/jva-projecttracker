@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/services/providers.dart';
 import 'package:logger/logger.dart';
 
@@ -52,22 +53,24 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   }
 
   String _messageForError(FirebaseAuthException e) {
+    final strings = ref.read(appStringsProvider);
     switch (e.code) {
       case 'email-already-in-use':
-        return 'An account already exists for that email.';
+        return strings.emailAlreadyInUse;
       case 'invalid-email':
-        return 'That email address looks invalid.';
+        return strings.invalidEmail;
       case 'weak-password':
-        return 'Password is too weak (use at least 6 characters).';
+        return strings.weakPassword;
       default:
-        return e.message ?? 'Sign-up failed.';
+        return e.message ?? strings.signUpFailed;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final strings = ref.watch(appStringsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
+      appBar: AppBar(title: Text(strings.createAccountTitle)),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -79,16 +82,28 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Icon(
+                    Icons.work_outline,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    strings.appTitle,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 24),
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.fieldEmail,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Email is required'
+                        ? strings.emailRequired
                         : null,
                   ),
                   const SizedBox(height: 12),
@@ -96,25 +111,25 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     controller: _passwordController,
                     obscureText: true,
                     autofillHints: const [AutofillHints.newPassword],
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.fieldPassword,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) => (v == null || v.length < 6)
-                        ? 'Use at least 6 characters'
+                        ? strings.useAtLeast6Chars
                         : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _confirmPasswordController,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Confirm password',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.fieldConfirmPassword,
+                      border: const OutlineInputBorder(),
                     ),
                     onFieldSubmitted: (_) => _submit(),
                     validator: (v) => v != _passwordController.text
-                        ? 'Passwords do not match'
+                        ? strings.passwordsDoNotMatch
                         : null,
                   ),
                   if (_errorMessage != null) ...[
@@ -135,7 +150,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                             width: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Create account'),
+                        : Text(strings.createAccountButton),
                   ),
                 ],
               ),

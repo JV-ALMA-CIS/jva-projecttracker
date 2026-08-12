@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Internal tool: any authenticated JVA staff account may read/write
+    // uploaded Document Library files. Same posture as firestore.rules.
+    match /documents/{documentId}/{fileName} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

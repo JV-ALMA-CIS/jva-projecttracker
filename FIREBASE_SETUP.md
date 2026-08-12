@@ -32,7 +32,7 @@ gcloud services enable \
 ```
 
 `aiplatform.googleapis.com` is Vertex AI — this is what the Cloud Functions use to
-call Gemini with Google Search grounding, so contract discovery and application-area
+call Gemini with Google Search grounding, so opportunity discovery and application-area
 discovery both depend on it.
 
 ## 4. Set up Firestore and Auth
@@ -74,12 +74,12 @@ flutter run -d chrome   # or -d <android device id>
 - **`discoverApplicationAreas`** (called from the Application form's "Discover"
   button): sends the app's name/description to Gemini with Google Search grounding,
   asking for realistic real-world application areas/industries.
-- **`searchContracts`** (called from the Contracts tab's search icon, and also runs
-  automatically every Monday via `scheduledContractDiscovery`): builds a summary of
+- **`searchOpportunities`** (called from the Opportunities tab's search icon, and also runs
+  automatically every Monday via `scheduledOpportunityDiscovery`): builds a summary of
   your Firestore `projects` + `applications` as a "company profile", searches the
-  web for open contracts/tenders, and asks Gemini to score each one 0–100 for fit
-  against that profile with a short justification. New contracts are written to the
-  `contracts` collection (deduped by source URL).
+  web for open opportunities/tenders, and asks Gemini to score each one 0–100 for fit
+  against that profile with a short justification. New opportunities are written to the
+  `opportunities` collection (deduped by source URL).
 
 Both rely on Vertex AI's Google Search grounding tool, so no separate search API key
 is needed — just the `aiplatform.googleapis.com` API enabled and billing active.

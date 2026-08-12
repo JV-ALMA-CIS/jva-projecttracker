@@ -1,97 +1,28 @@
-import 'dart:async';
+/// Barrel file re-exporting every Riverpod provider in the app, split into
+/// domain-based files under `lib/services/<domain>/`. Existing code
+/// continues to do `import 'package:jva_projecttracker/services/providers.dart';`
+/// and see every provider name unchanged — see each domain file for the
+/// providers, controllers, and doc comments that used to live here.
+library;
 
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:jva_projecttracker/models/application.dart';
-import 'package:jva_projecttracker/models/contract.dart';
-import 'package:jva_projecttracker/models/project.dart';
-import 'package:jva_projecttracker/models/user_profile.dart';
-import 'package:jva_projecttracker/services/application_service.dart';
-import 'package:jva_projecttracker/services/auth_service.dart';
-import 'package:jva_projecttracker/services/contract_service.dart';
-import 'package:jva_projecttracker/services/currency_service.dart';
-import 'package:jva_projecttracker/services/project_service.dart';
-import 'package:jva_projecttracker/services/user_service.dart';
-
-final authServiceProvider = Provider((ref) => AuthService());
-final projectServiceProvider = Provider((ref) => ProjectService());
-final applicationServiceProvider = Provider((ref) => ApplicationService());
-final contractServiceProvider = Provider((ref) => ContractService());
-final userServiceProvider = Provider((ref) => UserService());
-final currencyServiceProvider = Provider((ref) => CurrencyService());
-
-final authStateChangesProvider = StreamProvider<User?>((ref) {
-  return ref.watch(authServiceProvider).authStateChanges();
-});
-
-/// The signed-in user's Firestore profile (including role), or null if
-/// signed out or the profile hasn't been created yet.
-final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) {
-  final user = ref.watch(authStateChangesProvider).value;
-  if (user == null) return Stream.value(null);
-  return ref.watch(userServiceProvider).watch(user.uid);
-});
-
-final projectsStreamProvider = StreamProvider<List<Project>>((ref) {
-  return ref.watch(projectServiceProvider).watchAll();
-});
-
-final applicationsStreamProvider = StreamProvider<List<CompanyApplication>>((
-  ref,
-) {
-  return ref.watch(applicationServiceProvider).watchAll();
-});
-
-final contractsStreamProvider = StreamProvider<List<Contract>>((ref) {
-  return ref.watch(contractServiceProvider).watchAll();
-});
-
-/// Project counts per status, derived from [projectsStreamProvider]. Kept as
-/// a separate provider (rather than computed inline in the dashboard) so the
-/// dashboard can `.select()` a single status count and skip rebuilding when
-/// unrelated counts change.
-final projectStatusCountsProvider = Provider<Map<ProjectStatus, int>>((ref) {
-  final projects = ref.watch(projectsStreamProvider).value ?? const [];
-  final counts = <ProjectStatus, int>{
-    for (final s in ProjectStatus.values) s: 0,
-  };
-  for (final p in projects) {
-    counts[p.status] = (counts[p.status] ?? 0) + 1;
-  }
-  return counts;
-});
-
-/// The top 5 contracts by fit score, derived from [contractsStreamProvider]
-/// (already ordered by `fitScorePercent` desc at the Firestore query level).
-final topContractsProvider = Provider<List<Contract>>((ref) {
-  final contracts = ref.watch(contractsStreamProvider).value ?? const [];
-  return contracts.take(5).toList();
-});
-
-/// A single project by id, live. Scoped to navigation (edit screen) rather
-/// than the app lifetime, so autoDispose is correct here — unlike the
-/// top-level [projectsStreamProvider], which backs an always-visible list.
-final projectByIdProvider = StreamProvider.autoDispose.family<Project?, String>(
-  (ref, id) {
-    return ref.watch(projectServiceProvider).watchById(id);
-  },
-);
-
-/// A single application by id, live. See [projectByIdProvider] for the
-/// autoDispose/family reasoning.
-final applicationByIdProvider = StreamProvider.autoDispose
-    .family<CompanyApplication?, String>((ref, id) {
-      return ref.watch(applicationServiceProvider).watchById(id);
-    });
-
-/// Live exchange rates from [base] to the other supported currencies, kept
-/// alive for 30 minutes so switching fields/screens doesn't re-hit the API
-/// on every rebuild, while still refreshing periodically rather than being
-/// pinned to a stale value for the whole session.
-final exchangeRatesProvider = FutureProvider.autoDispose
-    .family<Map<String, double>, String>((ref, base) async {
-      final link = ref.keepAlive();
-      final timer = Timer(const Duration(minutes: 30), link.close);
-      ref.onDispose(timer.cancel);
-      return ref.watch(currencyServiceProvider).fetchRates(base);
-    });
+export 'core/auth_providers.dart';
+export 'core/settings_providers.dart';
+export 'core/navigation_providers.dart';
+export 'core/notification_providers.dart';
+export 'opportunities/opportunity_providers.dart';
+export 'proposals/proposal_providers.dart';
+export 'submissions/submission_providers.dart';
+export 'projects/project_providers.dart';
+export 'company_intelligence/business_unit_providers.dart';
+export 'company_intelligence/product_providers.dart';
+export 'company_intelligence/service_providers.dart';
+export 'company_intelligence/capability_providers.dart';
+export 'company_intelligence/technology_providers.dart';
+export 'company_intelligence/industry_providers.dart';
+export 'company_intelligence/experience_providers.dart';
+export 'company_intelligence/knowledge_article_providers.dart';
+export 'company_intelligence/knowledge_summary_providers.dart';
+export 'library/library_document_providers.dart';
+export 'discovery/discovery_providers.dart';
+export 'discovery/tender_providers.dart';
+export 'recommendations/recommendation_providers.dart';

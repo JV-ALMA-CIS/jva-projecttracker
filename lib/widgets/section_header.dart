@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
 
-/// A section title with an optional trailing action, replacing the raw
-/// `Text` + `Row` heading patterns previously hand-rolled per screen.
 class SectionHeader extends StatelessWidget {
   const SectionHeader({super.key, required this.title, this.trailing});
 

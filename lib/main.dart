@@ -1,18 +1,42 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:jva_projecttracker/firebase_options.dart';
 import 'package:jva_projecttracker/screens/shared/auth_gate.dart';
+import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Registered in Firebase Console > App Check > Apps > (web app) > reCAPTCHA.
 const _recaptchaV3SiteKey = '6LfKkmEtAAAAACrWfNaSoMTYcvzNMsPlUTE0ltmv';
 
+const supportedLocales = [Locale('en'), Locale('it')];
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Required before any DateFormat call that names a locale explicitly
+  // (e.g. `DateFormat.yMMMd(strings.locale.toString())`, used by the
+  // Experience and Opportunity Pipeline date pickers) — without this,
+  // intl throws LocaleDataException at the first such call.
+  for (final locale in supportedLocales) {
+    await initializeDateFormatting(locale.languageCode);
+  }
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Web has no local Firestore cache by default, so every screen
+  // (e.g. the Project Workspace's Timeline/Deliverables/Risks/Activity
+  // subsections, each its own `StreamProvider.family`) re-fetches from the
+  // network on every navigation. Persistence lets repeat visits serve from
+  // the local cache instantly while Firestore syncs any changes in the
+  // background — same mechanism `cloud_firestore` already uses by default
+  // on mobile, just not on web.
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+  );
   await FirebaseAppCheck.instance.activate(
     providerWeb: ReCaptchaV3Provider(_recaptchaV3SiteKey),
     providerAndroid: kDebugMode
@@ -22,19 +46,37 @@ Future<void> main() async {
         ? const AppleDebugProvider()
         : const AppleAppAttestProvider(),
   );
-  runApp(const ProviderScope(child: JvaProjectTrackerApp()));
+  final prefs = await SharedPreferences.getInstance();
+  runApp(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      child: const JvaProjectTrackerApp(),
+    ),
+  );
 }
 
-class JvaProjectTrackerApp extends StatelessWidget {
+class JvaProjectTrackerApp extends ConsumerWidget {
   const JvaProjectTrackerApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
+    final font = ref.watch(appFontProvider);
+    final locale = ref.watch(appLocaleProvider);
+
     return MaterialApp(
       title: 'JVA Project Tracker',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      themeMode: themeMode,
+      theme: AppTheme.light(font: font),
+      darkTheme: AppTheme.dark(font: font),
+      locale: locale,
+      supportedLocales: supportedLocales,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: const AuthGate(),
     );
   }

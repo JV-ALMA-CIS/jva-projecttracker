@@ -1,8 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/screens/auth/sign_up_screen.dart';
 import 'package:jva_projecttracker/services/providers.dart';
+import 'package:jva_projecttracker/theme/app_page_route.dart';
 import 'package:logger/logger.dart';
 
 final _log = Logger();
@@ -47,16 +49,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   }
 
   Future<void> _resetPassword() async {
+    final strings = ref.read(appStringsProvider);
     final email = _emailController.text.trim();
     if (email.isEmpty) {
-      setState(() => _errorMessage = 'Enter your email above first.');
+      setState(() => _errorMessage = strings.enterEmailFirst);
       return;
     }
     try {
       await ref.read(authServiceProvider).sendPasswordResetEmail(email);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Password reset email sent to $email')),
+          SnackBar(content: Text(strings.passwordResetSent(email))),
         );
       }
     } on FirebaseAuthException catch (e) {
@@ -66,22 +69,24 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   }
 
   String _messageForError(FirebaseAuthException e) {
+    final strings = ref.read(appStringsProvider);
     switch (e.code) {
       case 'invalid-email':
-        return 'That email address looks invalid.';
+        return strings.invalidEmail;
       case 'user-disabled':
-        return 'This account has been disabled.';
+        return strings.accountDisabled;
       case 'user-not-found':
       case 'invalid-credential':
       case 'wrong-password':
-        return 'Incorrect email or password.';
+        return strings.incorrectCredentials;
       default:
-        return e.message ?? 'Sign-in failed.';
+        return e.message ?? strings.signInFailed;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final strings = ref.watch(appStringsProvider);
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -101,7 +106,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'JVA Project Tracker',
+                    strings.appTitle,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
@@ -110,12 +115,12 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.fieldEmail,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Email is required'
+                        ? strings.emailRequired
                         : null,
                   ),
                   const SizedBox(height: 12),
@@ -123,13 +128,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     controller: _passwordController,
                     obscureText: true,
                     autofillHints: const [AutofillHints.password],
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.fieldPassword,
+                      border: const OutlineInputBorder(),
                     ),
                     onFieldSubmitted: (_) => _submit(),
                     validator: (v) => (v == null || v.isEmpty)
-                        ? 'Password is required'
+                        ? strings.passwordRequired
                         : null,
                   ),
                   if (_errorMessage != null) ...[
@@ -150,22 +155,18 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                             width: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Sign in'),
+                        : Text(strings.signInButton),
                   ),
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: _submitting ? null : _resetPassword,
-                    child: const Text('Forgot password?'),
+                    child: Text(strings.forgotPassword),
                   ),
                   TextButton(
                     onPressed: _submitting
                         ? null
-                        : () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const SignUpScreen(),
-                            ),
-                          ),
-                    child: const Text('Create an account'),
+                        : () => pushSlideFade(context, const SignUpScreen()),
+                    child: Text(strings.createAccountButton),
                   ),
                 ],
               ),

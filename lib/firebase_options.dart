@@ -56,16 +56,16 @@ class DefaultFirebaseOptions {
     projectId: 'jva-projecttracker',
     storageBucket: 'jva-projecttracker.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCfAIdYKuIuP7WKYNl-z_BQ8mkYHTWgDq4',
     appId: '1:331812083332:ios:569ed6f48d4603e86154d1',
     messagingSenderId: '331812083332',
     projectId: 'jva-projecttracker',
     storageBucket: 'jva-projecttracker.firebasestorage.app',
+    iosClientId:
+        '331812083332-i7jcnv9ho9n9q9ugllckqkmh2q9m3run.apps.googleusercontent.com',
     iosBundleId: 'com.jva.jvaProjecttracker',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyCfAIdYKuIuP7WKYNl-z_BQ8mkYHTWgDq4',
     appId: '1:331812083332:ios:5bb903219c4cbd436154d1',

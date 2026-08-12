@@ -3,8 +3,8 @@
 - Stack: Flutter (Dart), Firebase (Firestore, Auth, Cloud Functions on Vertex AI)
 - Target Platforms: Android, Web, iOS
 - Purpose: Internal JVA tool to track past/running/planned projects, catalogue
-  company-built applications, and auto-discover + AI-score contract/tender
-  opportunities against the company's profile. Sibling project to `coffeecore`,
+  company-built applications, and auto-discover + AI-score opportunities against
+  the company's profile. Sibling project to `coffeecore`,
   lives in the same `JVA Projects/` parent folder but is a fully separate app.
 
 ## Build & Quality Commands
@@ -16,13 +16,13 @@
 
 ## Architecture
 - Folder structure is layer-first, same convention as coffeecore:
-  - `lib/models/` — `Project`, `CompanyApplication`, `Contract` (Firestore-backed,
+  - `lib/models/` — `Project`, `CompanyApplication`, `Opportunity` (Firestore-backed,
     each with `fromMap`/`toMap` and a status enum + `label` extension)
   - `lib/screens/` — one subfolder per feature (`dashboard`, `projects`,
-    `applications`, `contracts`, `shared`); `shared/home_shell.dart` is the bottom-nav
+    `applications`, `opportunities`, `shared`); `shared/home_shell.dart` is the bottom-nav
     app shell
   - `lib/services/` — one Firestore service per collection (`ProjectService`,
-    `ApplicationService`, `ContractService`) + `providers.dart` (Riverpod
+    `ApplicationService`, `OpportunityService`) + `providers.dart` (Riverpod
     `StreamProvider`s wrapping each service's `watchAll()`)
   - `functions/` — Node.js Cloud Functions (Firebase Functions v2), not Dart
 - State management: `flutter_riverpod` (no code generation — providers are hand-written
@@ -35,11 +35,11 @@ app live web-search capability without a separate search API key:
 
 - `discoverApplicationAreas({name, description})` → `{areas: string[]}` — called from
   the Application form's "Discover" button.
-- `searchContracts({query?})` → `{created: number}` — called from the Contracts tab's
+- `searchOpportunities({query?})` → `{created: number}` — called from the Opportunities tab's
   search icon. Builds a "company profile" string from all `projects` + `applications`
-  docs, asks Gemini to find real open contracts/tenders via search and score each
-  0–100 for fit, then writes new ones into `contracts` (deduped by `sourceUrl`).
-- `scheduledContractDiscovery` — same logic as `searchContracts`, runs automatically
+  docs, asks Gemini to find real open opportunities via search and score each
+  0–100 for fit, then writes new ones into `opportunities` (deduped by `sourceUrl`).
+- `scheduledOpportunityDiscovery` — same logic as `searchOpportunities`, runs automatically
   every Monday 08:00 via Cloud Scheduler.
 
 Model responses are parsed as raw JSON extracted from the text response (`extractJson`

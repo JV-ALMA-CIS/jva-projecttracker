@@ -29,8 +29,173 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    match /contracts/{contractId} {
+    match /opportunities/{opportunityId} {
       allow read, write: if isAuthenticated();
+    }
+
+    match /businessUnits/{businessUnitId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /products/{productId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /services/{serviceId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /capabilities/{capabilityId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /technologies/{technologyId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /industries/{industryId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /experiences/{experienceId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /knowledgeBase/{articleId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Append-only pipeline history — see OpportunityService.transitionStage.
+    // No client update/delete: events are a factual record of what
+    // happened, so they should never be edited or removed once written.
+    match /opportunityEvents/{eventId} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // AI-generated portfolio recommendations (Milestone 3.6). Documents are
+    // normally created by the generateRecommendations Cloud Function, but
+    // read/write is left as the same blanket internal-tool rule as every
+    // other collection — the client only ever updates a recommendation's
+    // own status (dismiss/mark actioned), never its AI-generated content.
+    match /recommendations/{recommendationId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Proposal Workspace (Milestone 4.1). Section content lives in its own
+    // collection (proposalSections), keyed by proposalId, rather than an
+    // embedded array on the proposal document.
+    match /proposals/{proposalId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /proposalSections/{sectionId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Opportunity Discovery Engine (Milestone 3.7). Sources are configured
+    // by staff; runs are normally written by the runDiscoverySource Cloud
+    // Function, but read/write is left as the same blanket internal-tool
+    // rule as every other collection — unlike opportunityEvents, a stuck or
+    // failed run may legitimately need manual cleanup, so this isn't
+    // append-only.
+    //
+    // DEPRECATED (Milestone 3.8a): superseded by tenderSources/
+    // tenderSyncRuns below. Left untouched and still readable/writable so
+    // existing data isn't stranded — no new code should write here. Will
+    // be retired once a migration copies any remaining data into
+    // tenderSources.
+    match /discoverySources/{sourceId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /discoveryRuns/{runId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Document Library & Submission Readiness (Milestone 4.3). Firestore
+    // stores only document metadata — the binary itself lives in Firebase
+    // Storage (see storage.rules), referenced here via storagePath/downloadUrl.
+    match /documents/{documentId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Submission Workspace (Milestone 4.5). Was missing an explicit rule
+    // block entirely — Firestore denies unmatched paths by default, so
+    // these two collections were unreachable in production despite the
+    // screen/service code being fully built.
+    match /submissions/{submissionId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /submissionCommunications/{communicationId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Project Delivery Workspace. Own collections keyed by projectId, same
+    // shape as proposalSections/submissionCommunications relative to their
+    // parents. Was missing entirely — same class of gap as Submissions
+    // above (Firestore denies unmatched paths by default).
+    match /projectMilestones/{milestoneId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /projectDeliverables/{deliverableId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /projectRisks/{riskId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Append-only activity log — same rationale as opportunityEvents: a
+    // factual record of what happened, never edited or removed once
+    // written.
+    match /projectEvents/{eventId} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // Executive Dashboard (Milestone 5.1). Single document
+    // (analytics/executiveSummary) — the whole company has exactly one
+    // current AI executive summary at a time, regenerated wholesale by the
+    // generateExecutiveSummary Cloud Function rather than edited by hand.
+    // Read stays open to any authenticated staff account; client write is
+    // intentionally not needed (the Cloud Function uses the Admin SDK,
+    // which bypasses these rules), so it's left unwritable from the client
+    // rather than granted and unused.
+    match /analytics/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // Tender Sources / Discovery Engine v2 (Milestone 3.8a). Unlike
+    // discoverySources above, write is admin-only — the brief is explicit
+    // that "Regular users cannot modify Tender Sources." Read stays open
+    // to any authenticated staff account so the (upcoming) Discovery
+    // Dashboard and Source Workspace can be viewed by everyone.
+    match /tenderSources/{sourceId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Sync audit trail, written by runTenderSourceSync /
+    // scheduledTenderSourceSync. Same rationale as discoveryRuns — not
+    // append-only, since a stuck/failed run may need manual cleanup — but
+    // scoped to admin-write to match tenderSources; any authenticated
+    // staff account can still read it (Sync/Discovery History views).
+    match /tenderSyncRuns/{runId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Staging collection for EmailConnector (Milestone 3.8a) — populated by
+    // a future mail-ingestion pipeline (webhook or scheduled IMAP poll,
+    // running as Admin SDK and therefore bypassing these rules regardless).
+    // Client write restricted to admin in case of manual cleanup/testing.
+    match /tenderEmailInboxItems/{itemId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
   }
 }

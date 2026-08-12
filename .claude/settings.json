@@ -46,7 +46,19 @@
       "WebFetch(domain:api.frankfurter.app)",
       "WebFetch(domain:api.frankfurter.dev)",
       "WebFetch(domain:api.exchangerate.host)",
-      "WebFetch(domain:open.er-api.com)"
+      "WebFetch(domain:open.er-api.com)",
+      "Bash(flutter --version)",
+      "Bash(timeout 15 node -e \"console.log\\('loading...'\\); require\\('./index.js'\\); console.log\\('loaded ok'\\);\")",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(NODE_OPTIONS=\"--dns-result-order=ipv4first\" firebase deploy --only firestore:rules,firestore:indexes,functions --project jva-projecttracker)",
+      "Bash(chromium-cli --help)",
+      "PowerShell(Get-Process | Where-Object { $_.ProcessName -match 'dart|flutter' } | Select-Object Id, ProcessName, StartTime, CPU)",
+      "PowerShell(Get-Process | Where-Object { $_.ProcessName -match 'dart|flutter_tester' } | Select-Object Id, ProcessName, StartTime, CPU)",
+      "Bash(nohup flutter run -d chrome --web-port=8765)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(xargs -I{} grep -l \"TODO\\\\|FIXME\\\\|placeholder\" {})",
+      "Bash(awk -F'class ' '{print $2}')",
+      "Bash(awk '{print $1}')"
     ],
     "additionalDirectories": [
       "C:\\Users\\Administrator\\.claude\\plans"
