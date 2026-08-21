@@ -23,6 +23,8 @@ import 'package:jva_projecttracker/services/experience_summary_service.dart';
 import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/theme/app_page_route.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
+import 'package:jva_projecttracker/widgets/page_back_button.dart';
+import 'package:jva_projecttracker/widgets/page_header.dart';
 import 'package:jva_projecttracker/widgets/bullet_list.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/fit_score_badge.dart';
@@ -51,25 +53,41 @@ class ExperienceWorkspaceScreen extends ConsumerWidget {
     final experienceAsync = ref.watch(experienceByIdProvider(experienceId));
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(strings.experiencesTitle),
-        actions: [
-          IconButton(
-            onPressed: () => pushSlideFade(
-              context,
-              ExperienceFormScreen(experienceId: experienceId),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                0,
+              ),
+              child: PageHeader(
+                leading: PageBackButton(),
+                title: strings.experiencesTitle,
+                action: IconButton(
+                  onPressed: () => pushSlideFade(
+                    context,
+                    ExperienceFormScreen(experienceId: experienceId),
+                  ),
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: strings.editExperienceTitle,
+                ),
+              ),
             ),
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: strings.editExperienceTitle,
-          ),
-        ],
-      ),
-      body: experienceAsync.when(
-        data: (experience) => experience == null
-            ? const SizedBox.shrink()
-            : _Body(experience: experience),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text(strings.errorPrefix(error))),
+            Expanded(
+              child: experienceAsync.when(
+                data: (experience) => experience == null
+                    ? const SizedBox.shrink()
+                    : _Body(experience: experience),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) =>
+                    Center(child: Text(strings.errorPrefix(error))),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -169,7 +187,10 @@ class _BodyState extends ConsumerState<_Body> {
         ],
         if (recommendations.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.aiRecommendationsSectionTitle),
+          SectionHeader(
+            title: strings.aiRecommendationsSectionTitle,
+            accentColor: AppStatusColors.ai,
+          ),
           for (final r in recommendations)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -183,22 +204,34 @@ class _BodyState extends ConsumerState<_Body> {
         ],
         if (activeOpportunities.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.activeOpportunitiesSectionTitle),
+          SectionHeader(
+            title: strings.activeOpportunitiesSectionTitle,
+            accentColor: AppStatusColors.info,
+          ),
           _buildOpportunities(context, activeOpportunities),
         ],
         if (proposals.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.proposalPipelineSectionTitle),
+          SectionHeader(
+            title: strings.proposalPipelineSectionTitle,
+            accentColor: AppStatusColors.info,
+          ),
           _buildProposals(context, strings, proposals),
         ],
         if (submissions.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.submissionsSectionTitle),
+          SectionHeader(
+            title: strings.submissionsSectionTitle,
+            accentColor: AppStatusColors.info,
+          ),
           _buildSubmissions(context, strings, submissions, opportunities),
         ],
         if (recentEvents.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.recentActivitySectionTitle),
+          SectionHeader(
+            title: strings.recentActivitySectionTitle,
+            accentColor: AppStatusColors.neutral,
+          ),
           _buildActivity(context, strings, recentEvents),
         ],
         const SizedBox(height: AppSpacing.xl),

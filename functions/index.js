@@ -4,6 +4,10 @@ const { setGlobalOptions } = require("firebase-functions/v2");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const { GoogleGenAI } = require("@google/genai");
+const {
+  isGroundingRedirectStub,
+  checkUrlReachable,
+} = require("./connectors/tenderSourceConnector");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -125,6 +129,16 @@ opportunities${query ? ` related to: ${query}` : " that this company is realisti
 For each one, estimate a fit score (0-100) for how well this company's stack and
 experience match the opportunity, and briefly justify the score.
 
+CRITICAL — "sourceUrl" must be a direct, real, publicly loadable link to the
+actual tender/opportunity page as it appears in the address bar of the site
+that published it — the exact URL a person could paste into a browser and
+land on that tender. NEVER return a Google Search redirect/citation link
+(any URL on a "vertexaisearch.cloud.google.com" or similar Google-hosted
+redirect domain) — those are internal citation artifacts, not something a
+person can open later, and are worthless here. If you cannot determine the
+real, direct URL for an opportunity, omit that opportunity entirely rather
+than guessing or substituting a search-result link.
+
 Return ONLY a JSON array, each item shaped as:
 {
   "title": string,
@@ -157,6 +171,11 @@ No commentary, no markdown fences.`;
   let created = 0;
   for (const c of candidates) {
     if (!c.sourceUrl || !c.title) continue;
+    // Same fabrication risk as ApiConnector._syncAiSearch (this uses the
+    // identical Gemini + Google Search grounding technique) — drop any
+    // candidate whose sourceUrl is a Google grounding-redirect citation
+    // stub rather than a real page. See tenderSourceConnector.js.
+    if (isGroundingRedirectStub(c.sourceUrl)) continue;
 
     const existing = await db
       .collection("opportunities")
@@ -166,10 +185,13 @@ No commentary, no markdown fences.`;
     if (!existing.empty) continue;
 
     const now = admin.firestore.Timestamp.now();
+    const sourceUrlVerified = await checkUrlReachable(c.sourceUrl);
     await db.collection("opportunities").add({
       title: c.title,
       description: c.description || "",
       sourceUrl: c.sourceUrl,
+      sourceUrlVerified,
+      sourceUrlVerifiedAt: sourceUrlVerified ? now : null,
       client: c.client || null,
       deadline: c.deadline ? admin.firestore.Timestamp.fromDate(new Date(c.deadline)) : null,
       status: "discovered",
@@ -186,16 +208,24 @@ No commentary, no markdown fences.`;
   return created;
 }
 
-/** Callable: searchOpportunities — { query?: string } -> { created: number } */
-exports.searchOpportunities = onCall(async (request) => {
+/**
+ * Callable: searchOpportunities — { query?: string } -> { created: number }
+ * 240s (default is 60s): runOpportunityDiscovery now does a real HTTP
+ * reachability check per surviving candidate before writing it — see
+ * checkUrlReachable in tenderSourceConnector.js.
+ */
+exports.searchOpportunities = onCall({ timeoutSeconds: 240 }, async (request) => {
   const created = await runOpportunityDiscovery(request.data?.query);
   return { created };
 });
 
 /** Scheduled: runs the same discovery routine automatically every Monday. */
-exports.scheduledOpportunityDiscovery = onSchedule("every monday 08:00", async () => {
-  await runOpportunityDiscovery();
-});
+exports.scheduledOpportunityDiscovery = onSchedule(
+  { schedule: "every monday 08:00", timeoutSeconds: 240 },
+  async () => {
+    await runOpportunityDiscovery();
+  },
+);
 
 // ====================================================================
 // Milestone 3.3 — AI Opportunity Classification
@@ -1259,9 +1289,14 @@ exports.runDiscoverySource = onCall({ timeoutSeconds: 120 }, async (request) => 
 // ====================================================================
 // Milestone 3.8 — Tender Source Sync + Connection Test
 // ====================================================================
-const { runTenderSourceSync, scheduledTenderSourceSync } = require("./tenderSourceSync");
+const {
+  runTenderSourceSync,
+  scheduledTenderSourceSync,
+  runAllTenderSourcesNow,
+} = require("./tenderSourceSync");
 exports.runTenderSourceSync = runTenderSourceSync;
 exports.scheduledTenderSourceSync = scheduledTenderSourceSync;
+exports.runAllTenderSourcesNow = runAllTenderSourcesNow;
 
 const { testTenderSourceConnection } = require("./testTenderSourceConnection");
 exports.testTenderSourceConnection = testTenderSourceConnection;
@@ -1272,8 +1307,17 @@ exports.onTenderOpportunityOutcome = onTenderOpportunityOutcome;
 const { seedProductionTenderSources } = require("./seedTenderSources");
 exports.seedProductionTenderSources = seedProductionTenderSources;
 
+const { backfillTenderSourceWebsites } = require("./backfillTenderSourceWebsites");
+exports.backfillTenderSourceWebsites = backfillTenderSourceWebsites;
+
 const { seedCompanyIntelligenceSpine } = require("./seedCompanyIntelligenceSpine");
 exports.seedCompanyIntelligenceSpine = seedCompanyIntelligenceSpine;
+
+const { recheckSourceUrlLinks } = require("./recheckSourceUrlLinks");
+exports.recheckSourceUrlLinks = recheckSourceUrlLinks;
+
+const { backfillSourceUrlVerification } = require("./backfillSourceUrlVerification");
+exports.backfillSourceUrlVerification = backfillSourceUrlVerification;
 
 // ====================================================================
 // Business Workflow Governance — Opportunity Business Unit backfill

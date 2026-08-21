@@ -20,6 +20,7 @@ class KnowledgeSummaryCard extends StatelessWidget {
     required this.health,
     required this.healthLabel,
     required this.onTap,
+    this.accentColor,
   });
 
   final IconData icon;
@@ -31,9 +32,17 @@ class KnowledgeSummaryCard extends StatelessWidget {
   final String healthLabel;
   final VoidCallback onTap;
 
+  /// Entity-type identity color (see `AppEntityColors`) for the icon —
+  /// distinct from [health]'s background/foreground pair below, which still
+  /// carries this entity type's coverage status, not its identity. Falls
+  /// back to `colorScheme.primary` when omitted so any other caller keeps
+  /// its prior look.
+  final Color? accentColor;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final iconColor = accentColor ?? theme.colorScheme.primary;
     final (background, foreground) = knowledgeHealthColors(
       theme.colorScheme,
       health,
@@ -45,20 +54,29 @@ class KnowledgeSummaryCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadii.card),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(icon, color: theme.colorScheme.primary),
-                    const Spacer(),
+                    Icon(icon, color: iconColor),
                     Text('$count', style: theme.textTheme.headlineMedium),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Text(title, style: theme.textTheme.titleMedium),
-                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   recentlyUpdatedLabel,
                   style: theme.textTheme.bodySmall,
@@ -68,8 +86,10 @@ class KnowledgeSummaryCard extends StatelessWidget {
                 Text(
                   relatedOpportunitiesLabel,
                   style: theme.textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const Spacer(),
+                const SizedBox(height: AppSpacing.sm),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Chip(

@@ -35,6 +35,45 @@ function extractJson(text) {
   return JSON.parse(match[0]);
 }
 
+/**
+ * True when [error] is a Vertex AI/Gemini quota or rate-limit rejection
+ * (HTTP 429, or the `RESOURCE_EXHAUSTED` gRPC status code the SDK surfaces
+ * for the same condition) rather than a genuine failure like bad input or a
+ * parsing error. These are transient — the same request often succeeds
+ * seconds later once the per-minute quota window rolls over — so callers
+ * should retry them; anything else should fail immediately.
+ */
+function isQuotaError(error) {
+  const message = String(error && error.message ? error.message : error);
+  return (
+    error?.status === 429 ||
+    error?.code === 429 ||
+    /RESOURCE_EXHAUSTED/i.test(message) ||
+    /quota/i.test(message) ||
+    /rate limit/i.test(message)
+  );
+}
+
+/**
+ * Retries [fn] on a Vertex AI/Gemini quota error ([isQuotaError]) with a
+ * short delay, up to [maxRetries] extra attempts. Any non-quota error, or
+ * exhausting all retries, rethrows the original error — this only smooths
+ * over transient per-minute quota windows, it does not paper over a project
+ * whose quota is genuinely too low for its sync volume.
+ */
+async function withQuotaRetry(fn, { maxRetries = 2, delayMs = 5000 } = {}) {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isQuotaError(error) || attempt >= maxRetries) throw error;
+      attempt += 1;
+      await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+    }
+  }
+}
+
 /** Summarizes the company's project/application history for prompt context. */
 async function buildCompanyProfile() {
   const [projectsSnap, applicationsSnap] = await Promise.all([
@@ -61,4 +100,11 @@ async function buildCompanyProfile() {
   ].join("\n");
 }
 
-module.exports = { GEMINI_MODEL, genAiClient, extractJson, buildCompanyProfile };
+module.exports = {
+  GEMINI_MODEL,
+  genAiClient,
+  extractJson,
+  buildCompanyProfile,
+  isQuotaError,
+  withQuotaRetry,
+};

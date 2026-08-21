@@ -50,6 +50,11 @@ const catalog = buildBusinessUnitCatalog([
   { id: "bu-3", name: "Agribusiness", slug: "agribusiness" },
   { id: "bu-4", name: "Facility Management", slug: "facility-management" },
   { id: "bu-5", name: "Human Resources", slug: "human-resources" },
+  {
+    id: "bu-6",
+    name: "Embassy & Diplomatic Facilities",
+    slug: "embassy-diplomatic-facilities",
+  },
 ]);
 
 test("matchBusinessUnitName matches an exact name case-insensitively", () => {
@@ -124,6 +129,30 @@ test("matchBusinessUnitName resolves Construction aliases", () => {
       matchBusinessUnitName(alias, catalog),
       "bu-1",
       `expected "${alias}" to resolve to Construction`,
+    );
+  }
+});
+
+test("matchBusinessUnitName resolves Embassy & Diplomatic Facilities aliases", () => {
+  for (const alias of [
+    "embassy",
+    "embassies",
+    "diplomatic",
+    "diplomacy",
+    "US Embassy",
+    "U.S. Embassy",
+    "ambassador",
+    "ambassador residence",
+    "residence",
+    "compound",
+    "Rosslyn",
+    "OBO",
+    "RPSO",
+  ]) {
+    assert.equal(
+      matchBusinessUnitName(alias, catalog),
+      "bu-6",
+      `expected "${alias}" to resolve to Embassy & Diplomatic Facilities`,
     );
   }
 });

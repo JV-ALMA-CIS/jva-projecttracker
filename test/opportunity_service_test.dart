@@ -254,6 +254,84 @@ void main() {
       expect(updated.title, 'Rural water tender');
     });
   });
+
+  group('deleteByTenderSourceId', () {
+    Future<String> seedOpportunityFromSource(String? tenderSourceId) {
+      final now = DateTime.utc(2024, 6, 1);
+      return firestore
+          .collection('opportunities')
+          .add({
+            'title': 'Tender from source',
+            'description': '',
+            'sourceUrl': 'https://example.com/tender/x',
+            'status': 'discovered',
+            'fitScorePercent': 50,
+            'discoveredAt': now,
+            'updatedAt': now,
+            'tenderSourceId': tenderSourceId,
+          })
+          .then((doc) => doc.id);
+    }
+
+    test(
+      'deletes only opportunities matching the given tenderSourceId',
+      () async {
+        final matchingA = await seedOpportunityFromSource('source-1');
+        final matchingB = await seedOpportunityFromSource('source-1');
+        final other = await seedOpportunityFromSource('source-2');
+        final unrelated = await seedOpportunity();
+
+        final deletedCount = await service.deleteByTenderSourceId('source-1');
+
+        expect(deletedCount, 2);
+        expect(await service.watchById(matchingA).first, isNull);
+        expect(await service.watchById(matchingB).first, isNull);
+        expect(await service.watchById(other).first, isNotNull);
+        expect(await service.watchById(unrelated).first, isNotNull);
+      },
+    );
+
+    test('returns 0 when no opportunity references the source', () async {
+      await seedOpportunity();
+
+      final deletedCount = await service.deleteByTenderSourceId(
+        'no-such-source',
+      );
+
+      expect(deletedCount, 0);
+    });
+  });
+
+  group('markSourceUrlVerified', () {
+    test(
+      'sets sourceUrlVerified to true and stamps sourceUrlVerifiedAt — the '
+      'manual override for a real link the automated reachability check '
+      'couldn\'t confirm (e.g. a site that blocks automated requests)',
+      () async {
+        final id = await seedOpportunity();
+        final before = await service.watchById(id).first;
+        expect(before!.sourceUrlVerified, isFalse);
+        expect(before.sourceUrlVerifiedAt, isNull);
+
+        await service.markSourceUrlVerified(id);
+
+        final after = await service.watchById(id).first;
+        expect(after!.sourceUrlVerified, isTrue);
+        expect(after.sourceUrlVerifiedAt, isNotNull);
+      },
+    );
+
+    test('does not touch unrelated fields', () async {
+      final id = await seedOpportunity();
+
+      await service.markSourceUrlVerified(id);
+
+      final after = await service.watchById(id).first;
+      expect(after!.title, 'Rural water tender');
+      expect(after.sourceUrl, 'https://example.com/tender/1');
+      expect(after.status, OpportunityStatus.discovered);
+    });
+  });
 }
 
 /// Test-only helper mirroring how [OpportunityClassificationScreen] rebuilds

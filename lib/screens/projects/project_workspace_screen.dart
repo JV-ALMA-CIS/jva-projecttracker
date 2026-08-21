@@ -403,7 +403,10 @@ class _ProjectWorkspaceScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // --- Status & progress (health) ---
-        SectionHeader(title: strings.overallHealthLabel),
+        SectionHeader(
+          title: strings.overallHealthLabel,
+          accentColor: AppStatusColors.info,
+        ),
         const SizedBox(height: AppSpacing.sm),
         HoverLift(
           child: Card(
@@ -499,7 +502,12 @@ class _ProjectWorkspaceScreenState
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(child: SectionHeader(title: strings.budgetSectionTitle)),
+            Expanded(
+              child: SectionHeader(
+                title: strings.budgetSectionTitle,
+                accentColor: AppStatusColors.operations,
+              ),
+            ),
             TextButton.icon(
               onPressed: () => _editBudget(project),
               icon: const Icon(Icons.edit_outlined, size: 18),
@@ -515,7 +523,12 @@ class _ProjectWorkspaceScreenState
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(child: SectionHeader(title: strings.timelineSectionTitle)),
+            Expanded(
+              child: SectionHeader(
+                title: strings.timelineSectionTitle,
+                accentColor: AppStatusColors.operations,
+              ),
+            ),
             IconButton(
               onPressed: () => _addOrEditMilestone(project.id),
               icon: const Icon(Icons.add_circle_outline, size: 20),
@@ -562,7 +575,10 @@ class _ProjectWorkspaceScreenState
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
-              child: SectionHeader(title: strings.deliverablesSectionTitle),
+              child: SectionHeader(
+                title: strings.deliverablesSectionTitle,
+                accentColor: AppStatusColors.operations,
+              ),
             ),
             IconButton(
               onPressed: () => _addOrEditDeliverable(project.id),
@@ -610,7 +626,12 @@ class _ProjectWorkspaceScreenState
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(child: SectionHeader(title: strings.risksSectionTitle)),
+            Expanded(
+              child: SectionHeader(
+                title: strings.risksSectionTitle,
+                accentColor: AppStatusColors.warning,
+              ),
+            ),
             IconButton(
               onPressed: () => _addOrEditRisk(project.id),
               icon: const Icon(Icons.add_circle_outline, size: 20),
@@ -655,7 +676,10 @@ class _ProjectWorkspaceScreenState
         const SizedBox(height: AppSpacing.xl),
 
         // --- Team ---
-        SectionHeader(title: strings.teamSectionTitle),
+        SectionHeader(
+          title: strings.teamSectionTitle,
+          accentColor: AppStatusColors.info,
+        ),
         const SizedBox(height: AppSpacing.sm),
         HoverLift(
           child: Card(
@@ -709,6 +733,7 @@ class _ProjectWorkspaceScreenState
             Expanded(
               child: SectionHeader(
                 title: strings.aiKnowledgeExtractionSectionTitle,
+                accentColor: AppStatusColors.ai,
               ),
             ),
             TextButton.icon(
@@ -765,7 +790,10 @@ class _ProjectWorkspaceScreenState
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
-              child: SectionHeader(title: strings.lessonsLearnedSectionTitle),
+              child: SectionHeader(
+                title: strings.lessonsLearnedSectionTitle,
+                accentColor: AppStatusColors.success,
+              ),
             ),
             IconButton(
               onPressed: () => _editLessonsLearned(project),
@@ -795,7 +823,10 @@ class _ProjectWorkspaceScreenState
         const SizedBox(height: AppSpacing.xl),
 
         // --- Experience & Knowledge publishing (real) ---
-        SectionHeader(title: strings.relatedKnowledgeSectionTitle),
+        SectionHeader(
+          title: strings.relatedKnowledgeSectionTitle,
+          accentColor: AppStatusColors.ai,
+        ),
         const SizedBox(height: AppSpacing.sm),
         HoverLift(
           child: Card(
@@ -917,7 +948,10 @@ class _ProjectWorkspaceScreenState
         const SizedBox(height: AppSpacing.xl),
 
         // --- Recent activity (real) ---
-        SectionHeader(title: strings.recentActivityLabel),
+        SectionHeader(
+          title: strings.recentActivityLabel,
+          accentColor: AppStatusColors.info,
+        ),
         const SizedBox(height: AppSpacing.sm),
         Consumer(
           builder: (context, ref, _) {
@@ -944,7 +978,10 @@ class _ProjectWorkspaceScreenState
         const SizedBox(height: AppSpacing.xl),
 
         // --- AI Project Insights (no service exists yet) ---
-        SectionHeader(title: strings.aiExecutiveSummaryTitle),
+        SectionHeader(
+          title: strings.aiExecutiveSummaryTitle,
+          accentColor: AppStatusColors.ai,
+        ),
         const SizedBox(height: AppSpacing.sm),
         HoverLift(
           child: Card(

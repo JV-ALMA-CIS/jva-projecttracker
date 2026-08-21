@@ -45,6 +45,7 @@ class DocumentPreviewScreen extends ConsumerWidget {
                       icon: Icons.description_outlined,
                       title: document.title,
                       subtitle: strings.documentDetailsTitle,
+                      accentColor: AppStatusColors.neutral,
                     ),
                   ),
                   Expanded(child: _DocumentPreviewBody(document: document)),
@@ -138,7 +139,10 @@ class _DocumentPreviewBody extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.lg),
-        SectionHeader(title: strings.linkedProposalsLabel),
+        SectionHeader(
+          title: strings.linkedProposalsLabel,
+          accentColor: AppStatusColors.operations,
+        ),
         const SizedBox(height: AppSpacing.sm),
         RelationshipPicker(
           label: strings.linkedProposalsLabel,
@@ -167,7 +171,10 @@ class _DocumentPreviewBody extends ConsumerWidget {
           ),
         ],
         const SizedBox(height: AppSpacing.lg),
-        SectionHeader(title: strings.sectionRelationships),
+        SectionHeader(
+          title: strings.sectionRelationships,
+          accentColor: AppStatusColors.info,
+        ),
         const SizedBox(height: AppSpacing.sm),
         RelationshipPicker(
           label: strings.relatedBusinessUnitsLabel,

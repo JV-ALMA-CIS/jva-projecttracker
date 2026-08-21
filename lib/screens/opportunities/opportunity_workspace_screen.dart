@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/models/company_intelligence/business_unit.dart';
 import 'package:jva_projecttracker/models/company_intelligence/capability.dart';
+import 'package:jva_projecttracker/models/company_intelligence/certification.dart';
 import 'package:jva_projecttracker/models/company_intelligence/experience.dart';
 import 'package:jva_projecttracker/models/company_intelligence/knowledge_article.dart';
 import 'package:jva_projecttracker/models/company_intelligence/product.dart';
@@ -13,6 +14,7 @@ import 'package:jva_projecttracker/models/opportunity.dart';
 import 'package:jva_projecttracker/models/project.dart';
 import 'package:jva_projecttracker/models/proposal.dart';
 import 'package:jva_projecttracker/models/submission.dart';
+import 'package:jva_projecttracker/screens/company_intelligence/certifications/certifications_screen.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunity_classification_screen.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunity_pipeline_screen.dart';
 import 'package:jva_projecttracker/screens/projects/project_form_screen.dart';
@@ -21,6 +23,7 @@ import 'package:jva_projecttracker/screens/proposals/proposal_workspace_screen.d
 import 'package:jva_projecttracker/screens/recommendations/recommendations_screen.dart';
 import 'package:jva_projecttracker/screens/submissions/submission_workspace_screen.dart';
 import 'package:jva_projecttracker/services/ai_classification_service.dart';
+import 'package:jva_projecttracker/services/certification_eligibility.dart';
 import 'package:jva_projecttracker/services/match_analysis_service.dart';
 import 'package:jva_projecttracker/services/notification_builder.dart';
 import 'package:jva_projecttracker/services/providers.dart';
@@ -283,12 +286,17 @@ class _OpportunityWorkspaceScreenState
         const SizedBox(height: AppSpacing.xl),
         _buildAiOverview(context, strings, o),
         const SizedBox(height: AppSpacing.xl),
-        SectionHeader(title: strings.needsAttentionSectionTitle),
+        SectionHeader(
+          title: strings.needsAttentionSectionTitle,
+          accentColor: AppStatusColors.warning,
+        ),
         _buildNeedsAttention(context, strings, o, proposalAsync.value),
         const SizedBox(height: AppSpacing.xl),
         _buildClassificationSection(context, strings, o, dateFormat),
         const SizedBox(height: AppSpacing.md),
         _BusinessUnitsSection(opportunity: o),
+        const SizedBox(height: AppSpacing.md),
+        _EligibilitySection(opportunity: o),
         const SizedBox(height: AppSpacing.md),
         _buildMatchAnalysisSection(context, strings, o, dateFormat),
         const SizedBox(height: AppSpacing.md),
@@ -305,7 +313,10 @@ class _OpportunityWorkspaceScreenState
         ],
         if (relatedRecommendations.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.aiRecommendationsSectionTitle),
+          SectionHeader(
+            title: strings.aiRecommendationsSectionTitle,
+            accentColor: AppStatusColors.ai,
+          ),
           for (final r in relatedRecommendations)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -417,14 +428,16 @@ class _OpportunityWorkspaceScreenState
             children: [
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.auto_awesome_outlined,
-                    color: theme.colorScheme.primary,
+                    color: AppStatusColors.ai,
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   Text(
                     strings.aiOverviewSectionTitle,
-                    style: theme.textTheme.titleMedium,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
@@ -1032,7 +1045,7 @@ class _OpportunityWorkspaceScreenState
       child: submissionAsync.when(
         data: (submission) {
           final statusColor = submission == null
-              ? Colors.grey
+              ? AppStatusColors.neutral
               : submissionStatusColor(submission.status);
           return ListTile(
             leading: CircleAvatar(
@@ -1076,8 +1089,8 @@ class _OpportunityWorkspaceScreenState
 
   Color _projectStatusColor(ProjectStatus status) => switch (status) {
     ProjectStatus.planned => AppStatusColors.info,
-    ProjectStatus.running => AppStatusColors.success,
-    ProjectStatus.past => Colors.grey,
+    ProjectStatus.running => AppStatusColors.operations,
+    ProjectStatus.past => AppStatusColors.neutral,
   };
 
   Widget _buildProjectSection(
@@ -1202,6 +1215,254 @@ class _BusinessUnitsSection extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Manual eligibility-requirements editor + computed gap display for the
+/// Opportunity Workspace (Company Certifications, B4). Requirements are
+/// always hand-entered — see [OpportunityCertificationRequirement]'s doc
+/// comment — so this section never blocks on AI classification the way
+/// [_buildMatchAnalysisSection]/[_buildStrategicReviewSection] do. Gaps are
+/// recomputed live from [certificationsStreamProvider] via the pure
+/// [computeEligibilityGaps] engine every time either the requirements list
+/// or the held certifications change.
+class _EligibilitySection extends ConsumerWidget {
+  const _EligibilitySection({required this.opportunity});
+
+  final Opportunity opportunity;
+
+  Future<void> _addRequirement(BuildContext context, WidgetRef ref) async {
+    final strings = ref.read(appStringsProvider);
+    final result = await showDialog<OpportunityCertificationRequirement>(
+      context: context,
+      builder: (context) => _RequirementDialog(strings: strings),
+    );
+    if (result == null) return;
+    final updated = [...opportunity.requiredCertifications, result];
+    await ref
+        .read(opportunityServiceProvider)
+        .updateRequiredCertifications(opportunity.id, updated);
+  }
+
+  Future<void> _removeRequirement(WidgetRef ref, int index) async {
+    final updated = [...opportunity.requiredCertifications]..removeAt(index);
+    await ref
+        .read(opportunityServiceProvider)
+        .updateRequiredCertifications(opportunity.id, updated);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final strings = ref.watch(appStringsProvider);
+    final certificationsAsync = ref.watch(certificationsStreamProvider);
+    final requirements = opportunity.requiredCertifications;
+
+    final gaps = computeEligibilityGaps(
+      requirements: requirements,
+      heldCertifications: certificationsAsync.value ?? const [],
+      now: DateTime.now(),
+    );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.verified_outlined, color: theme.colorScheme.primary),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    strings.eligibilitySectionTitle,
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () =>
+                      pushSlideFade(context, const CertificationsScreen()),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: Text(strings.viewCertificationsButton),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              strings.eligibilitySectionCaption,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            if (requirements.isEmpty)
+              Text(
+                strings.noRequirementsRecordedMessage,
+                style: theme.textTheme.bodySmall,
+              )
+            else
+              Column(
+                children: [
+                  for (var i = 0; i < requirements.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(requirements[i].label)),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            tooltip: strings.removeRequirementTooltip,
+                            onPressed: () => _removeRequirement(ref, i),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            if (requirements.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              if (gaps.isEmpty)
+                Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline,
+                      size: 18,
+                      color: AppStatusColors.success,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(strings.noEligibilityGapsMessage),
+                  ],
+                )
+              else
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    for (final gap in gaps)
+                      Tooltip(
+                        message: gap.detail,
+                        child: Chip(
+                          avatar: Icon(
+                            Icons.warning_amber_outlined,
+                            size: 16,
+                            color: gap.severity == EligibilityGapSeverity.danger
+                                ? AppStatusColors.danger
+                                : AppStatusColors.warning,
+                          ),
+                          label: Text(gap.label),
+                          backgroundColor:
+                              (gap.severity == EligibilityGapSeverity.danger
+                                      ? AppStatusColors.danger
+                                      : AppStatusColors.warning)
+                                  .withValues(alpha: 0.12),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+            const SizedBox(height: AppSpacing.md),
+            OutlinedButton.icon(
+              onPressed: () => _addRequirement(context, ref),
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(strings.addRequirementButton),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dialog for manually adding one [OpportunityCertificationRequirement] —
+/// type is required, grade/class is optional (non-NCA requirements can
+/// match by type alone; see `certification_eligibility.dart`).
+class _RequirementDialog extends StatefulWidget {
+  const _RequirementDialog({required this.strings});
+
+  final AppStrings strings;
+
+  @override
+  State<_RequirementDialog> createState() => _RequirementDialogState();
+}
+
+class _RequirementDialogState extends State<_RequirementDialog> {
+  CertificationType _type = CertificationType.nca;
+  final _gradeController = TextEditingController();
+  final _labelController = TextEditingController();
+
+  @override
+  void dispose() {
+    _gradeController.dispose();
+    _labelController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = widget.strings;
+    return AlertDialog(
+      title: Text(strings.addRequirementButton),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<CertificationType>(
+            initialValue: _type,
+            decoration: InputDecoration(
+              labelText: strings.fieldCertificationType,
+            ),
+            items: [
+              for (final type in CertificationType.values)
+                DropdownMenuItem(
+                  value: type,
+                  child: Text(strings.certificationTypeLabel(type)),
+                ),
+            ],
+            onChanged: (value) {
+              if (value != null) setState(() => _type = value);
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _gradeController,
+            decoration: InputDecoration(
+              labelText: strings.requiredGradeOptionalHint,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _labelController,
+            decoration: InputDecoration(
+              labelText: strings.fieldCertificationName,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(strings.cancelButton),
+        ),
+        FilledButton(
+          onPressed: () {
+            final grade = _gradeController.text.trim();
+            final label = _labelController.text.trim().isNotEmpty
+                ? _labelController.text.trim()
+                : strings.certificationTypeLabel(_type);
+            Navigator.of(context).pop(
+              OpportunityCertificationRequirement(
+                type: _type,
+                gradeOrClass: grade.isEmpty ? null : grade,
+                label: label,
+              ),
+            );
+          },
+          child: Text(strings.saveButton),
+        ),
+      ],
     );
   }
 }

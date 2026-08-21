@@ -3,26 +3,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/models/company_intelligence/business_unit.dart';
 import 'package:jva_projecttracker/models/opportunity.dart';
+import 'package:jva_projecttracker/models/tender_source.dart';
+import 'package:jva_projecttracker/models/user_profile.dart';
 import 'package:jva_projecttracker/screens/opportunities/discovery_dashboard_screen.dart';
 import 'package:jva_projecttracker/screens/opportunities/discovery_sources_screen.dart';
+import 'package:jva_projecttracker/screens/opportunities/opportunity_explore_screen.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunity_inbox_screen.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunity_workspace_screen.dart';
+import 'package:jva_projecttracker/screens/opportunities/tender_sources_screen.dart';
 import 'package:jva_projecttracker/screens/projects/project_workspace_screen.dart';
 import 'package:jva_projecttracker/services/business_unit_seed_service.dart';
 import 'package:jva_projecttracker/services/delivery_and_wins.dart';
 import 'package:jva_projecttracker/services/opportunity_business_unit_backfill_service.dart';
 import 'package:jva_projecttracker/services/opportunity_filters.dart';
 import 'package:jva_projecttracker/services/providers.dart';
+import 'package:jva_projecttracker/services/source_url_verification_service.dart';
 import 'package:jva_projecttracker/theme/app_page_route.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/fade_slide_in.dart';
 import 'package:jva_projecttracker/widgets/fit_score_badge.dart';
 import 'package:jva_projecttracker/widgets/hover_lift.dart';
-import 'package:jva_projecttracker/widgets/page_header.dart';
+import 'package:jva_projecttracker/widgets/open_source_link_button.dart';
 import 'package:jva_projecttracker/widgets/pipeline_stage_badge.dart';
 import 'package:logger/logger.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 final _log = Logger();
 
@@ -38,6 +42,7 @@ const _kTabColors = [
   AppStatusColors.info,
   AppStatusColors.warning,
   AppStatusColors.ai,
+  AppStatusColors.success,
 ];
 
 class OpportunitiesScreen extends ConsumerStatefulWidget {
@@ -51,12 +56,12 @@ class OpportunitiesScreen extends ConsumerStatefulWidget {
 class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController = TabController(
-    length: 3,
+    length: 4,
     vsync: this,
   );
-  bool _searching = false;
   bool _backfilling = false;
   bool _seedingBusinessUnits = false;
+  bool _verifyingSourceUrls = false;
 
   @override
   void dispose() {
@@ -64,37 +69,30 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
     super.dispose();
   }
 
-  Future<void> _runDiscovery() async {
-    final strings = ref.read(appStringsProvider);
-    setState(() => _searching = true);
-    try {
-      final created = await ref
-          .read(opportunityServiceProvider)
-          .triggerDiscoveryRun();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.foundOpportunities(created))),
-        );
-      }
-    } catch (e) {
-      _log.e('Opportunity discovery failed', error: e);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(strings.searchFailed(e))));
-      }
-    } finally {
-      if (mounted) setState(() => _searching = false);
-    }
+  /// Was: called the `searchOpportunities` callable directly (the older,
+  /// source-agnostic AI-search discovery in functions/index.js —
+  /// `runOpportunityDiscovery`). That path predates the Tender Source
+  /// system, never sets `tenderSourceId` on what it creates, and carries
+  /// none of the exact-grounding-URL-match validation, site-targeting
+  /// prompt, or soft-block detection added to `runTenderSourceSync`
+  /// (functions/connectors/apiConnector.js) — running it kept producing
+  /// fabricated/dead sourceUrls and opportunities with no working "open
+  /// source dashboard" button (that button is gated on `tenderSourceId`,
+  /// which this path never set), even after those fixes shipped, because
+  /// this button was never calling the fixed code at all. Now navigates to
+  /// Tender Sources instead, where discovery runs per-source through the
+  /// maintained path.
+  void _runDiscovery() {
+    pushSlideFade(context, const TenderSourcesScreen());
   }
 
   /// Admin-only setup step — run this BEFORE the backfill button below.
   /// Ensures the canonical Business Unit catalog (Construction, Facility
   /// Management, Agribusiness, Information Technology, Human Resources)
   /// exists so classification/backfill have real entries to match against
-  /// — see `functions/seedCompanyBusinessUnits.js`. Same not-role-gated-
-  /// client-side pattern as `TenderSourcesScreen`'s "Seed Production
-  /// Sources" action.
+  /// — see `functions/seedCompanyBusinessUnits.js`. The action button is
+  /// hidden client-side for non-admins (see `build`'s `isAdmin` check); the
+  /// callable itself still re-checks the caller's role independently.
   Future<void> _seedBusinessUnits() async {
     final strings = ref.read(appStringsProvider);
     setState(() => _seedingBusinessUnits = true);
@@ -127,10 +125,9 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
   }
 
   /// Admin-only bulk action — see `functions/backfillOpportunityBusinessUnits.js`.
-  /// Not role-gated client-side (mirrors `TenderSourcesScreen`'s "Seed
-  /// Production Sources" action): a non-admin caller simply gets a
-  /// `permission-denied` error back from the callable itself, same as every
-  /// other admin-only write path in this app.
+  /// The action button is hidden client-side for non-admins (see `build`'s
+  /// `isAdmin` check); the callable itself still re-checks the caller's role
+  /// independently.
   Future<void> _runBusinessUnitBackfill() async {
     final strings = ref.read(appStringsProvider);
     setState(() => _backfilling = true);
@@ -162,9 +159,45 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
     }
   }
 
+  /// Admin-only maintenance action — see
+  /// `functions/backfillSourceUrlVerification.js`. Pages through the whole
+  /// `opportunities` collection via `startAfterId` until the server reports
+  /// no more documents, since each call only scans a bounded batch. The
+  /// action button is hidden client-side for non-admins (see `build`'s
+  /// `isAdmin` check).
+  Future<void> _runSourceUrlVerification() async {
+    final strings = ref.read(appStringsProvider);
+    setState(() => _verifyingSourceUrls = true);
+    try {
+      final totalChecked = await ref
+          .read(sourceUrlVerificationServiceProvider)
+          .runToCompletion();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              strings.sourceUrlVerificationResultMessage(totalChecked),
+            ),
+          ),
+        );
+      }
+    } on SourceUrlVerificationException catch (e) {
+      _log.e('Source URL verification failed', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(strings.errorPrefix(e))));
+      }
+    } finally {
+      if (mounted) setState(() => _verifyingSourceUrls = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
+    final isAdmin =
+        ref.watch(currentUserProfileProvider).value?.role == UserRole.admin;
 
     return Scaffold(
       appBar: AppBar(
@@ -175,38 +208,55 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
             tooltip: strings.addOpportunityManuallyTitle,
           ),
           IconButton(
-            onPressed: _searching ? null : _runDiscovery,
-            icon: _searching
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.travel_explore_outlined),
+            onPressed: _runDiscovery,
+            icon: const Icon(Icons.travel_explore_outlined),
             tooltip: strings.searchTooltip,
           ),
-          IconButton(
-            onPressed: _seedingBusinessUnits ? null : _seedBusinessUnits,
-            icon: _seedingBusinessUnits
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.apartment_outlined),
-            tooltip: strings.seedBusinessUnitsTooltip,
-          ),
-          IconButton(
-            onPressed: _backfilling ? null : _runBusinessUnitBackfill,
-            icon: _backfilling
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.account_tree_outlined),
-            tooltip: strings.assignBusinessUnitsTooltip,
-          ),
+          if (isAdmin) ...[
+            IconButton(
+              onPressed: _seedingBusinessUnits ? null : _seedBusinessUnits,
+              icon: _seedingBusinessUnits
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.apartment_outlined),
+              tooltip: strings.seedBusinessUnitsTooltip,
+            ),
+            IconButton(
+              onPressed: _backfilling ? null : _runBusinessUnitBackfill,
+              icon: _backfilling
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.account_tree_outlined),
+              tooltip: strings.assignBusinessUnitsTooltip,
+            ),
+            IconButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const _BulkCleanupDialog(),
+              ),
+              icon: const Icon(Icons.cleaning_services_outlined),
+              tooltip: strings.bulkCleanupTooltip,
+            ),
+            IconButton(
+              onPressed: _verifyingSourceUrls
+                  ? null
+                  : _runSourceUrlVerification,
+              icon: _verifyingSourceUrls
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.link_outlined),
+              tooltip: strings.verifySourceUrlsTooltip,
+            ),
+          ],
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -235,34 +285,26 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
                 style: TextStyle(color: _kTabColors[2]),
               ),
             ),
+            Tab(
+              icon: Icon(Icons.explore_outlined, color: _kTabColors[3]),
+              child: Text(
+                strings.exploreTabLabel,
+                style: TextStyle(color: _kTabColors[3]),
+              ),
+            ),
           ],
         ),
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.lg,
-              AppSpacing.lg,
-              0,
-            ),
-            child: PageHeader(
-              icon: Icons.travel_explore_outlined,
-              title: strings.opportunitiesTitle,
-              subtitle: strings.opportunitiesSubtitle,
-            ),
-          ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: [
-                _PipelineTab(
-                  searching: _searching,
-                  onRunDiscovery: _runDiscovery,
-                ),
+                _PipelineTab(onRunDiscovery: _runDiscovery),
                 const OpportunityInboxBody(),
                 const DiscoveryDashboardBody(),
+                const OpportunityExploreBody(),
               ],
             ),
           ),
@@ -283,9 +325,8 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
 /// the Opportunities screen entirely — same lifetime as any other
 /// ConsumerStatefulWidget's local state in this app.
 class _PipelineTab extends ConsumerStatefulWidget {
-  const _PipelineTab({required this.searching, required this.onRunDiscovery});
+  const _PipelineTab({required this.onRunDiscovery});
 
-  final bool searching;
   final VoidCallback onRunDiscovery;
 
   @override
@@ -296,7 +337,6 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
   final _searchController = TextEditingController();
   OpportunityBuFilter _buFilter = const OpportunityBuFilter.all();
   OpportunityFacetFilters _facets = const OpportunityFacetFilters();
-  bool _filtersExpanded = false;
   bool _wonOnly = false;
 
   @override
@@ -314,6 +354,55 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
     });
   }
 
+  Future<void> _openFiltersSheet() async {
+    final strings = ref.read(appStringsProvider);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: AppSpacing.lg,
+              right: AppSpacing.lg,
+              top: AppSpacing.lg,
+              bottom:
+                  MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
+            ),
+            child: SingleChildScrollView(
+              child: StatefulBuilder(
+                builder: (context, setSheetState) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        strings.filtersButtonLabel,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _FacetFilterBar(
+                        strings: strings,
+                        facets: _facets,
+                        onChanged: (f) {
+                          setSheetState(() {});
+                          setState(() => _facets = f);
+                        },
+                        onClear: () {
+                          setSheetState(() {});
+                          _clearFilters();
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
@@ -327,7 +416,7 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
             icon: Icons.travel_explore_outlined,
             title: strings.noOpportunitiesDiscovered,
             action: FilledButton.icon(
-              onPressed: widget.searching ? null : widget.onRunDiscovery,
+              onPressed: widget.onRunDiscovery,
               icon: const Icon(Icons.travel_explore_outlined),
               label: Text(strings.searchNowButton),
             ),
@@ -353,7 +442,7 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg,
-                AppSpacing.md,
+                AppSpacing.sm,
                 AppSpacing.lg,
                 0,
               ),
@@ -366,7 +455,7 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg,
-                AppSpacing.md,
+                AppSpacing.sm,
                 AppSpacing.lg,
                 0,
               ),
@@ -384,52 +473,26 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   IconButton.filledTonal(
-                    onPressed: () =>
-                        setState(() => _filtersExpanded = !_filtersExpanded),
+                    onPressed: _openFiltersSheet,
                     icon: Icon(
-                      _filtersExpanded
-                          ? Icons.filter_alt
-                          : Icons.filter_alt_outlined,
+                      _facets.isEmpty
+                          ? Icons.filter_alt_outlined
+                          : Icons.filter_alt,
                     ),
                     tooltip: strings.filtersButtonLabel,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  FilterChip(
+                    avatar: const Icon(Icons.emoji_events_outlined, size: 16),
+                    label: Text(strings.awardedWonFilterLabel),
+                    selected: _wonOnly,
+                    onSelected: (selected) =>
+                        setState(() => _wonOnly = selected),
                   ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.sm,
-                AppSpacing.lg,
-                0,
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FilterChip(
-                  avatar: const Icon(Icons.emoji_events_outlined, size: 16),
-                  label: Text(strings.awardedWonFilterLabel),
-                  selected: _wonOnly,
-                  onSelected: (selected) => setState(() => _wonOnly = selected),
-                ),
-              ),
-            ),
-            if (_filtersExpanded)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                  AppSpacing.lg,
-                  0,
-                ),
-                child: SingleChildScrollView(
-                  child: _FacetFilterBar(
-                    strings: strings,
-                    facets: _facets,
-                    onChanged: (f) => setState(() => _facets = f),
-                    onClear: _clearFilters,
-                  ),
-                ),
-              ),
+            const SizedBox(height: AppSpacing.sm),
             Expanded(
               child: filtered.isEmpty
                   ? EmptyState(
@@ -493,6 +556,7 @@ class _BuSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings(Localizations.localeOf(context));
+    final sortedBusinessUnits = sortBusinessUnitsForChips(businessUnits);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -503,12 +567,12 @@ class _BuSelector extends StatelessWidget {
             onSelected: (_) => onSelected(const OpportunityBuFilter.all()),
           ),
           const SizedBox(width: AppSpacing.sm),
-          for (final bu in businessUnits) ...[
+          for (final bu in sortedBusinessUnits) ...[
             ChoiceChip(
               label: Text(bu.name),
               selected: _isSelected(OpportunityBuSelection.specific, bu.id),
               onSelected: (_) =>
-                  onSelected(OpportunityBuFilter.specific(bu.id)),
+                  onSelected(OpportunityBuFilter.specific(bu.id, bu.name)),
             ),
             const SizedBox(width: AppSpacing.sm),
           ],
@@ -693,7 +757,7 @@ Color _riskColor(RiskLevel r) => switch (r) {
 };
 
 Color _priorityColor(OpportunityPriority p) => switch (p) {
-  OpportunityPriority.low => Colors.grey,
+  OpportunityPriority.low => AppStatusColors.neutral,
   OpportunityPriority.medium => AppStatusColors.info,
   OpportunityPriority.high => AppStatusColors.warning,
 };
@@ -705,7 +769,7 @@ Color _priorityColor(OpportunityPriority p) => switch (p) {
 Color _fitColor(int fitScorePercent) {
   if (fitScorePercent >= 70) return AppStatusColors.success;
   if (fitScorePercent >= 40) return AppStatusColors.warning;
-  return Colors.grey;
+  return AppStatusColors.neutral;
 }
 
 class _OpportunitiesTile extends ConsumerWidget {
@@ -966,11 +1030,60 @@ class _OpportunitiesTile extends ConsumerWidget {
                       runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
+                        if (opportunity.tenderSourceId != null)
+                          Consumer(
+                            builder: (context, ref, _) {
+                              // Reads from the single, already-loaded
+                              // all-sources stream instead of
+                              // tenderSourceByIdProvider (an
+                              // autoDispose.family that opened a brand new
+                              // Firestore listener per distinct
+                              // tenderSourceId on every card) — that was
+                              // the real cause of this button appearing to
+                              // "take long to load": each opportunity card
+                              // was waiting on its own fresh network
+                              // round-trip instead of reusing data the
+                              // Opportunities screen already has.
+                              final allSources =
+                                  ref
+                                      .watch(tenderSourcesStreamProvider)
+                                      .value ??
+                                  const [];
+                              TenderSource? tenderSource;
+                              for (final s in allSources) {
+                                if (s.id == opportunity.tenderSourceId) {
+                                  tenderSource = s;
+                                  break;
+                                }
+                              }
+                              final website = tenderSource?.website;
+                              if (website == null || website.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              return Tooltip(
+                                message: strings.openSourceDashboardTooltip,
+                                child: OpenSourceLinkButton(
+                                  rawUrl: website,
+                                  label: strings.openSourceDashboardButton,
+                                  icon: Icons.dashboard_outlined,
+                                ),
+                              );
+                            },
+                          ),
                         if (opportunity.sourceUrl.isNotEmpty)
-                          TextButton(
-                            onPressed: () =>
-                                launchUrl(Uri.parse(opportunity.sourceUrl)),
-                            child: Text(strings.openSourceButton),
+                          OpenSourceLinkButton(
+                            rawUrl: opportunity.sourceUrl,
+                            label: strings.openSourceButton,
+                            // A never-checked link (null — e.g. discovered
+                            // before the reachability check existed) is
+                            // just as unproven as one that failed the
+                            // check, so both must show the warning badge.
+                            // Only an explicit `true` should render as
+                            // trusted.
+                            verified: opportunity.sourceUrlVerified,
+                            onMarkVerified: () => ref
+                                .read(opportunityServiceProvider)
+                                .markSourceUrlVerified(opportunity.id),
                           ),
                         FilledButton.icon(
                           onPressed: () => pushSlideFade(
@@ -1039,6 +1152,188 @@ class _OpportunitiesTile extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Admin cleanup tool for opportunities orphaned by a `TenderSource` that
+/// was deleted before `OpportunityService.deleteByTenderSourceId` existed —
+/// their `tenderSourceId` still points at a document that's already gone,
+/// so they can no longer be found that way. This finds matches purely
+/// client-side (reusing [matchesSearchQuery] against the already-live
+/// `opportunitiesStreamProvider`, same as the Pipeline tab's search bar) by
+/// keyword against title/client/sourceUrl — e.g. typing "KPLC" finds every
+/// opportunity whose title/client/URL still says KPLC — and bulk-deletes
+/// the matches after showing a preview list to confirm against.
+class _BulkCleanupDialog extends ConsumerStatefulWidget {
+  const _BulkCleanupDialog();
+
+  @override
+  ConsumerState<_BulkCleanupDialog> createState() => _BulkCleanupDialogState();
+}
+
+class _BulkCleanupDialogState extends ConsumerState<_BulkCleanupDialog> {
+  final _keywordController = TextEditingController();
+  String _keyword = '';
+  bool _deleting = false;
+  bool _selectAll = false;
+
+  @override
+  void dispose() {
+    _keywordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _delete(List<Opportunity> matches) async {
+    final strings = ref.read(appStringsProvider);
+    if (_selectAll) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(strings.bulkCleanupSelectAllConfirmTitle),
+          content: Text(
+            strings.bulkCleanupSelectAllConfirmMessage(matches.length),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(strings.cancelButton),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppStatusColors.danger,
+              ),
+              child: Text(strings.bulkCleanupDeleteButton),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    setState(() => _deleting = true);
+    try {
+      final deletedCount = await ref
+          .read(opportunityServiceProvider)
+          .deleteByIds(matches.map((o) => o.id).toList());
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(strings.bulkCleanupDeletedMessage(deletedCount)),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = ref.watch(appStringsProvider);
+    final all = ref.watch(opportunitiesStreamProvider).value ?? const [];
+    final trimmedKeyword = _keyword.trim();
+    final matches = _selectAll
+        ? all
+        : trimmedKeyword.isEmpty
+        ? const <Opportunity>[]
+        : all.where((o) => matchesSearchQuery(o, trimmedKeyword)).toList();
+
+    return AlertDialog(
+      title: Text(strings.bulkCleanupDialogTitle),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                strings.bulkCleanupDialogCaption,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: _keywordController,
+                autofocus: true,
+                enabled: !_selectAll,
+                decoration: InputDecoration(
+                  labelText: strings.bulkCleanupKeywordFieldLabel,
+                ),
+                onChanged: (v) => setState(() => _keyword = v),
+              ),
+              CheckboxListTile(
+                value: _selectAll,
+                onChanged: (v) => setState(() => _selectAll = v ?? false),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(strings.bulkCleanupSelectAllLabel),
+                subtitle: Text(
+                  strings.bulkCleanupSelectAllCaption,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              if (_selectAll || trimmedKeyword.isNotEmpty)
+                Text(
+                  matches.isEmpty
+                      ? strings.bulkCleanupNoMatchesMessage
+                      : strings.bulkCleanupMatchCountLabel(matches.length),
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              if (matches.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: matches.length,
+                    itemBuilder: (context, i) => ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        matches[i].title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        matches[i].client ?? matches[i].sourceUrl,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(strings.cancelButton),
+        ),
+        FilledButton(
+          onPressed: matches.isEmpty || _deleting
+              ? null
+              : () => _delete(matches),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppStatusColors.danger,
+          ),
+          child: _deleting
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(strings.bulkCleanupDeleteButton),
+        ),
+      ],
     );
   }
 }

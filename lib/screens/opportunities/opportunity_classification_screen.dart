@@ -239,6 +239,7 @@ class _OpportunityClassificationScreenState
                   child: PageHeader(
                     icon: Icons.psychology_outlined,
                     title: strings.editClassificationTitle,
+                    accentColor: AppStatusColors.info,
                   ),
                 ),
                 Expanded(child: _buildForm(context, strings)),
@@ -251,7 +252,10 @@ class _OpportunityClassificationScreenState
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        SectionHeader(title: strings.sectionClassification),
+        SectionHeader(
+          title: strings.sectionClassification,
+          accentColor: AppStatusColors.ai,
+        ),
         Wrap(
           spacing: AppSpacing.md,
           runSpacing: AppSpacing.sm,
@@ -375,7 +379,10 @@ class _OpportunityClassificationScreenState
           ],
         ),
         const SizedBox(height: AppSpacing.xl),
-        SectionHeader(title: strings.sectionDetails),
+        SectionHeader(
+          title: strings.sectionDetails,
+          accentColor: AppStatusColors.info,
+        ),
         AdaptiveFieldRow(
           children: [
             TextFormField(
@@ -402,7 +409,10 @@ class _OpportunityClassificationScreenState
           ],
         ),
         const SizedBox(height: AppSpacing.xl),
-        SectionHeader(title: strings.sectionRelationships),
+        SectionHeader(
+          title: strings.sectionRelationships,
+          accentColor: AppStatusColors.info,
+        ),
         RelationshipPicker<BusinessUnit>(
           label: strings.relatedBusinessUnitsLabel,
           optionsAsync: ref.watch(businessUnitsStreamProvider),

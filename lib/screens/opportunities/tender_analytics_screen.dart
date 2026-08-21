@@ -6,6 +6,7 @@ import 'package:jva_projecttracker/services/tender_analytics.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/hover_lift.dart';
+import 'package:jva_projecttracker/widgets/page_back_button.dart';
 import 'package:jva_projecttracker/widgets/page_header.dart';
 import 'package:jva_projecttracker/widgets/section_header.dart';
 
@@ -25,58 +26,71 @@ class TenderAnalyticsScreen extends ConsumerWidget {
     final summary = ref.watch(tenderAnalyticsSummaryProvider);
 
     return Scaffold(
-      appBar: AppBar(),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.lg,
-              AppSpacing.lg,
-              0,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                0,
+              ),
+              child: PageHeader(
+                leading: PageBackButton(),
+                icon: Icons.query_stats_outlined,
+                title: strings.tenderAnalyticsTitle,
+                accentColor: AppStatusColors.info,
+              ),
             ),
-            child: PageHeader(
-              icon: Icons.query_stats_outlined,
-              title: strings.tenderAnalyticsTitle,
-            ),
-          ),
-          Expanded(
-            child: summary.discovered == 0
-                ? EmptyState(
-                    icon: Icons.query_stats_outlined,
-                    title: strings.noAnalyticsDataYetMessage,
-                  )
-                : ListView(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg,
-                      AppSpacing.md,
-                      AppSpacing.lg,
-                      AppSpacing.lg,
-                    ),
-                    children: [
-                      _SummaryGrid(summary: summary, strings: strings),
-                      const SizedBox(height: AppSpacing.xl),
-                      SectionHeader(title: strings.monthlyTrendLabel),
-                      const SizedBox(height: AppSpacing.sm),
-                      const _MonthlyTrendChart(),
-                      const SizedBox(height: AppSpacing.xl),
-                      SectionHeader(title: strings.bestPerformingSourcesLabel),
-                      const SizedBox(height: AppSpacing.sm),
-                      const _SourceRanking(),
-                      const SizedBox(height: AppSpacing.xl),
-                      SectionHeader(
-                        title: strings.bestPerformingBusinessUnitsLabel,
+            Expanded(
+              child: summary.discovered == 0
+                  ? EmptyState(
+                      icon: Icons.query_stats_outlined,
+                      title: strings.noAnalyticsDataYetMessage,
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg,
+                        AppSpacing.md,
+                        AppSpacing.lg,
+                        AppSpacing.lg,
                       ),
-                      const SizedBox(height: AppSpacing.sm),
-                      const _BusinessUnitRanking(),
-                      const SizedBox(height: AppSpacing.xl),
-                      SectionHeader(title: strings.bestPerformingSectorsLabel),
-                      const SizedBox(height: AppSpacing.sm),
-                      const _SectorRanking(),
-                    ],
-                  ),
-          ),
-        ],
+                      children: [
+                        _SummaryGrid(summary: summary, strings: strings),
+                        const SizedBox(height: AppSpacing.xl),
+                        SectionHeader(
+                          title: strings.monthlyTrendLabel,
+                          accentColor: AppStatusColors.info,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        const _MonthlyTrendChart(),
+                        const SizedBox(height: AppSpacing.xl),
+                        SectionHeader(
+                          title: strings.bestPerformingSourcesLabel,
+                          accentColor: AppStatusColors.info,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        const _SourceRanking(),
+                        const SizedBox(height: AppSpacing.xl),
+                        SectionHeader(
+                          title: strings.bestPerformingBusinessUnitsLabel,
+                          accentColor: AppStatusColors.info,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        const _BusinessUnitRanking(),
+                        const SizedBox(height: AppSpacing.xl),
+                        SectionHeader(
+                          title: strings.bestPerformingSectorsLabel,
+                          accentColor: AppStatusColors.info,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        const _SectorRanking(),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

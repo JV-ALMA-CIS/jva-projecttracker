@@ -49,11 +49,34 @@ const ALIASES = {
   // Construction
   "civil works": "Construction",
   "building works": "Construction",
+  "design-build": "Construction",
+  "design build": "Construction",
+  roof: "Construction",
+  roofing: "Construction",
+  waterproofing: "Construction",
+  pipeline: "Construction",
+  "oil and gas": "Construction",
+  "oil & gas": "Construction",
+  petroleum: "Construction",
   // Human Resources
   hr: "Human Resources",
   hrm: "Human Resources",
   "human resource": "Human Resources",
   "human resource management": "Human Resources",
+  // Embassy & Diplomatic Facilities
+  embassy: "Embassy & Diplomatic Facilities",
+  embassies: "Embassy & Diplomatic Facilities",
+  diplomatic: "Embassy & Diplomatic Facilities",
+  diplomacy: "Embassy & Diplomatic Facilities",
+  "us embassy": "Embassy & Diplomatic Facilities",
+  "u.s. embassy": "Embassy & Diplomatic Facilities",
+  ambassador: "Embassy & Diplomatic Facilities",
+  "ambassador residence": "Embassy & Diplomatic Facilities",
+  residence: "Embassy & Diplomatic Facilities",
+  compound: "Embassy & Diplomatic Facilities",
+  rosslyn: "Embassy & Diplomatic Facilities",
+  obo: "Embassy & Diplomatic Facilities",
+  rpso: "Embassy & Diplomatic Facilities",
 };
 
 /**

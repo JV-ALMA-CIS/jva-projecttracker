@@ -83,6 +83,7 @@ class _OpportunityMatchAnalysisScreenState
                     child: PageHeader(
                       icon: Icons.insights_outlined,
                       title: strings.matchAnalysisScreenTitle,
+                      accentColor: AppStatusColors.ai,
                     ),
                   ),
                   Expanded(child: _buildBody(context, strings, opportunity)),
@@ -133,13 +134,19 @@ class _OpportunityMatchAnalysisScreenState
         if (opportunity.overallMatchScore == null)
           Text(strings.noMatchAnalysisYet)
         else ...[
-          SectionHeader(title: strings.overallMatchScoreLabel),
+          SectionHeader(
+            title: strings.overallMatchScoreLabel,
+            accentColor: AppStatusColors.ai,
+          ),
           Text(
             '${opportunity.overallMatchScore}%',
             style: theme.textTheme.displaySmall,
           ),
           const SizedBox(height: AppSpacing.lg),
-          SectionHeader(title: strings.categoryBreakdownLabel),
+          SectionHeader(
+            title: strings.categoryBreakdownLabel,
+            accentColor: AppStatusColors.ai,
+          ),
           Wrap(
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.sm,
@@ -171,7 +178,10 @@ class _OpportunityMatchAnalysisScreenState
           ),
           const SizedBox(height: AppSpacing.xl),
           if (opportunity.strategicRecommendation?.isNotEmpty ?? false) ...[
-            SectionHeader(title: strings.strategicRecommendationLabel),
+            SectionHeader(
+              title: strings.strategicRecommendationLabel,
+              accentColor: AppStatusColors.ai,
+            ),
             Text(opportunity.strategicRecommendation!),
             const SizedBox(height: AppSpacing.xl),
           ],

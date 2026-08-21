@@ -188,6 +188,7 @@ class _OpportunityPipelineScreenState
                   child: PageHeader(
                     icon: Icons.timeline_outlined,
                     title: strings.pipelineScreenTitle,
+                    accentColor: AppStatusColors.info,
                   ),
                 ),
                 Expanded(
@@ -225,7 +226,10 @@ class _OpportunityPipelineScreenState
           ],
         ),
         const SizedBox(height: AppSpacing.xl),
-        SectionHeader(title: strings.sectionPipelineDetails),
+        SectionHeader(
+          title: strings.sectionPipelineDetails,
+          accentColor: AppStatusColors.info,
+        ),
         TextFormField(
           controller: _assignedToController,
           decoration: InputDecoration(labelText: strings.fieldAssignedTo),
@@ -294,7 +298,10 @@ class _OpportunityPipelineScreenState
               : Text(strings.saveButton),
         ),
         const SizedBox(height: AppSpacing.xl),
-        SectionHeader(title: strings.pipelineHistoryTitle),
+        SectionHeader(
+          title: strings.pipelineHistoryTitle,
+          accentColor: AppStatusColors.neutral,
+        ),
         OpportunityTimeline(opportunityId: widget.opportunityId),
       ],
     );

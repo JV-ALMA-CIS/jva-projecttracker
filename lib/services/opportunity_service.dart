@@ -89,6 +89,40 @@ class OpportunityService {
     });
   }
 
+  /// Manual override for [Opportunity.sourceUrlVerified] — the escape hatch
+  /// for the false-negative case where the discovery-time HTTP check
+  /// (`createOpportunitiesFromCandidates` in functions/connectors/
+  /// tenderSourceConnector.js) fails not because the link is fake, but
+  /// because the real site blocks automated requests (some government/
+  /// embassy sites do this to bots while working fine in a real browser).
+  /// A human who has actually opened the link and confirmed it's real
+  /// calls this from `OpenSourceLinkButton`'s "Mark as verified" action.
+  Future<void> markSourceUrlVerified(String id) {
+    final now = Timestamp.now();
+    return _collection.doc(id).update({
+      'sourceUrlVerified': true,
+      'sourceUrlVerifiedAt': now,
+      'updatedAt': now,
+    });
+  }
+
+  /// Narrow write path for the Opportunity Workspace's manual Eligibility
+  /// requirements editor — same shape as [updateBusinessUnitIds]. Kept
+  /// separate from AI-written fields since certification requirements are
+  /// always entered by hand (see [OpportunityCertificationRequirement]'s
+  /// doc comment on why this stays out of scope for AI extraction).
+  Future<void> updateRequiredCertifications(
+    String id,
+    List<OpportunityCertificationRequirement> requiredCertifications,
+  ) {
+    return _collection.doc(id).update({
+      'requiredCertifications': requiredCertifications
+          .map((r) => r.toMap())
+          .toList(),
+      'updatedAt': Timestamp.now(),
+    });
+  }
+
   /// Full-document update — used by the classification editor, which
   /// touches many fields (relationships, priority, risk, etc.) at once.
   /// [updateStatus] stays as the narrow status-only path used by the
@@ -99,6 +133,50 @@ class OpportunityService {
 
   Future<void> delete(String id) {
     return _collection.doc(id).delete();
+  }
+
+  /// Deletes every opportunity whose `tenderSourceId` is [tenderSourceId] —
+  /// used when an admin deletes a `TenderSource` and wants its already-
+  /// imported opportunities gone too, rather than orphaned forever (deleting
+  /// the source document alone never touches `opportunities`, since the two
+  /// collections have no cascade-delete link). Returns the number deleted.
+  /// Batched in chunks of 400 (under Firestore's 500-write batch limit,
+  /// leaving headroom) since a well-used source can have produced more
+  /// opportunities than fit in a single batch.
+  Future<int> deleteByTenderSourceId(String tenderSourceId) async {
+    final snapshot = await _collection
+        .where('tenderSourceId', isEqualTo: tenderSourceId)
+        .get();
+    final docs = snapshot.docs;
+    for (var i = 0; i < docs.length; i += 400) {
+      final chunk = docs.skip(i).take(400);
+      final batch = _firestore.batch();
+      for (final doc in chunk) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+    return docs.length;
+  }
+
+  /// Bulk-deletes every opportunity in [ids] — the cleanup path for
+  /// opportunities orphaned by a `TenderSource` that was deleted before
+  /// [deleteByTenderSourceId] existed (its `tenderSourceId` field still
+  /// points at a document that's already gone, so it can no longer be
+  /// looked up that way; callers instead find matches client-side by title/
+  /// client/sourceUrl keyword — see `opportunities_screen.dart`'s bulk
+  /// cleanup dialog — and pass the resulting ids here). Same 400-per-batch
+  /// chunking as [deleteByTenderSourceId]. Returns the number deleted.
+  Future<int> deleteByIds(List<String> ids) async {
+    for (var i = 0; i < ids.length; i += 400) {
+      final chunk = ids.skip(i).take(400);
+      final batch = _firestore.batch();
+      for (final id in chunk) {
+        batch.delete(_collection.doc(id));
+      }
+      await batch.commit();
+    }
+    return ids.length;
   }
 
   /// Atomically moves an opportunity to [newStage]: updates
@@ -175,7 +253,10 @@ class OpportunityService {
   /// project/application history via Gemini. Results are written to Firestore
   /// by the function itself.
   Future<int> triggerDiscoveryRun({String? query}) async {
-    final callable = _functions.httpsCallable('searchOpportunities');
+    final callable = _functions.httpsCallable(
+      'searchOpportunities',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 240)),
+    );
     final result = await callable.call<Map<String, dynamic>>({'query': query});
     return (result.data['created'] as num?)?.toInt() ?? 0;
   }

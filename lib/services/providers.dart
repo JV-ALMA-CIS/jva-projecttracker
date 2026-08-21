@@ -14,6 +14,7 @@ export 'proposals/proposal_providers.dart';
 export 'submissions/submission_providers.dart';
 export 'projects/project_providers.dart';
 export 'company_intelligence/business_unit_providers.dart';
+export 'company_intelligence/certification_providers.dart';
 export 'company_intelligence/product_providers.dart';
 export 'company_intelligence/service_providers.dart';
 export 'company_intelligence/capability_providers.dart';

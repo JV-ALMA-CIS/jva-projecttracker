@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/theme/app_font.dart';
+import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/section_header.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -22,7 +23,10 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          SectionHeader(title: strings.sectionAppearance),
+          SectionHeader(
+            title: strings.sectionAppearance,
+            accentColor: AppStatusColors.neutral,
+          ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -80,7 +84,10 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 28),
-          SectionHeader(title: strings.sectionLanguage),
+          SectionHeader(
+            title: strings.sectionLanguage,
+            accentColor: AppStatusColors.neutral,
+          ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -102,7 +109,10 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 28),
-          SectionHeader(title: strings.sectionProfile),
+          SectionHeader(
+            title: strings.sectionProfile,
+            accentColor: AppStatusColors.info,
+          ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),

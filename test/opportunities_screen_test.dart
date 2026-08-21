@@ -14,6 +14,7 @@ import 'package:jva_projecttracker/services/opportunity_service.dart';
 import 'package:jva_projecttracker/services/proposal_service.dart';
 import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/services/recommendation_service.dart';
+import 'package:jva_projecttracker/services/tender_source_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _strings = AppStrings(Locale('en'));
@@ -48,6 +49,9 @@ Future<void> _pumpScreen(
         ),
         discoveryEngineServiceProvider.overrideWithValue(
           DiscoveryEngineService(),
+        ),
+        tenderSourceServiceProvider.overrideWithValue(
+          TenderSourceService(firestore: firestore),
         ),
       ],
       child: const MaterialApp(home: OpportunitiesScreen()),
@@ -212,4 +216,71 @@ void main() {
 
     expect(find.text(_strings.discoverySourcesTitle), findsOneWidget);
   });
+
+  testWidgets(
+    'shows an "Open source dashboard" button linking to the TenderSource\'s '
+    'real website when the opportunity has a tenderSourceId — this is the '
+    'guaranteed-real link, independent of whether the AI-suggested '
+    'sourceUrl was verified',
+    (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      final now = DateTime.utc(2024, 1, 1);
+      final sourceDoc = await firestore.collection('tenderSources').add({
+        'name': 'US Embassy Nairobi — Commercial Opportunities',
+        'organization': 'U.S. Embassy Nairobi',
+        'category': 'governmentAgency',
+        'discoveryMethod': 'api',
+        'website': 'https://ke.usembassy.gov/tag/commercial-opportunities/',
+        'status': 'active',
+        'enabled': true,
+        'createdAt': now,
+        'updatedAt': now,
+      });
+      await firestore.collection('opportunities').add({
+        'title': 'Roof replacement at Rosslyn compound',
+        'description': 'Construction services for roof replacement',
+        'sourceUrl':
+            'https://ke.usembassy.gov/embassy-of-the-united-states-of-america-nairobi-kenya-pr16154577-construction-services-for-the-roof-replacement-at-rosslyn-lonetree-compound-house-number-514/',
+        'sourceUrlVerified': false,
+        'status': 'discovered',
+        'fitScorePercent': 80,
+        'discoveredAt': now,
+        'updatedAt': now,
+        'tenderSourceId': sourceDoc.id,
+      });
+
+      await _pumpScreen(tester, firestore);
+      await tester.tap(find.text('Roof replacement at Rosslyn compound'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_strings.openSourceDashboardButton), findsOneWidget);
+      // The unreliable AI-guessed deep link is still shown too, as a
+      // secondary option — just no longer the only way to reach the source.
+      expect(find.text(_strings.openSourceButton), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'does not show an "Open source dashboard" button when the opportunity '
+    'has no tenderSourceId (e.g. a manually-added opportunity)',
+    (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      final now = DateTime.utc(2024, 1, 1);
+      await firestore.collection('opportunities').add({
+        'title': 'Manually added tender',
+        'description': 'Added by hand, no tender source',
+        'sourceUrl': 'https://example.com/tender/manual',
+        'status': 'discovered',
+        'fitScorePercent': 60,
+        'discoveredAt': now,
+        'updatedAt': now,
+      });
+
+      await _pumpScreen(tester, firestore);
+      await tester.tap(find.text('Manually added tender'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_strings.openSourceDashboardButton), findsNothing);
+    },
+  );
 }

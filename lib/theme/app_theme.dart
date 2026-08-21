@@ -41,15 +41,23 @@ class AppMotion {
   static const Curve exit = Curves.easeIn;
 }
 
-/// Centralized semantic status colors — the platform's one status-color
-/// system, consolidating what was already consistently chosen (just
-/// scattered) across `priority_style.dart`, `submission_status_style.dart`,
-/// and `fit_score_color`: green for healthy/positive outcomes, amber for
-/// "worth watching," red for critical/overdue, blue for neutral/
-/// informational, indigo reserved for AI/intelligence content specifically
-/// (never reused for a non-AI status, so an indigo accent always means
-/// "this came from the AI layer"). Screens should read these roles rather
-/// than reaching for `Colors.orange`/`Colors.red` directly.
+/// Centralized semantic status/section colors — the platform's one
+/// color-role system, consolidating what was already consistently chosen
+/// (just scattered) across `priority_style.dart`,
+/// `submission_status_style.dart`, `fit_score_color`, and various
+/// screen-local `_kTabColors`/`_sectionDot` helpers: green for
+/// healthy/positive outcomes, amber for "worth watching," red for
+/// critical/overdue, blue for neutral/informational, purple reserved for
+/// AI/intelligence content specifically (never reused for a non-AI status,
+/// so a purple accent always means "this came from the AI layer"), teal for
+/// operational/delivery work (Projects, Delivery & Wins), cyan for
+/// technology-specific content (distinct from the more general `info`
+/// blue), and a defined neutral for anything with no real status (replacing
+/// ad-hoc `Colors.grey`/`Colors.blueGrey` literals). Screens should read
+/// these roles rather than reaching for `Colors.orange`/`Colors.red`
+/// directly — every hardcoded status color found during the design-system
+/// audit (`pipeline_stage_badge.dart`, `submission_status_style.dart`) has
+/// been remapped onto this table.
 class AppStatusColors {
   const AppStatusColors._();
 
@@ -58,6 +66,60 @@ class AppStatusColors {
   static const Color danger = Color(0xFFD32F2F);
   static const Color info = Color(0xFF0288D1);
   static const Color ai = Color(0xFF5E35B1);
+
+  /// Operational/delivery work — active Projects, Delivery & Wins. Teal
+  /// reads as "in motion, on the ground" without colliding with success
+  /// (green, reserved for a *completed* positive outcome like Awarded) or
+  /// info (blue, reserved for general discovery/informational content).
+  static const Color operations = Color(0xFF00796B);
+
+  /// Technology-specific content (tech stack chips, IT Business Unit
+  /// accents) — distinct from [info] so "this is a technology" and "this is
+  /// generic informational content" don't collapse into the same blue.
+  static const Color technology = Color(0xFF0097A7);
+
+  /// The one deliberate neutral — used in place of raw `Colors.grey`/
+  /// `Colors.blueGrey` for a status that genuinely carries no signal (e.g.
+  /// "Withdrawn," "Not Classified," a catch-all pipeline stage). Never used
+  /// for text; see [AppTheme] for supporting-text color, which reads
+  /// `colorScheme.onSurfaceVariant` instead so it stays theme- and
+  /// brightness-aware.
+  static const Color neutral = Color(0xFF607D8B);
+
+  /// Low-alpha "container" tint of [color] — the one formula every status
+  /// badge/chip/card accent in this app uses for its background fill, so a
+  /// success/warning/danger/etc. badge always reads at the same visual
+  /// weight regardless of which screen renders it.
+  static Color container(Color color) => color.withValues(alpha: 0.12);
+}
+
+/// Categorical identity colors for Company Intelligence entity types —
+/// deliberately a *separate* palette from [AppStatusColors]. AppStatusColors
+/// answers "what state is this in" (healthy/watch/critical/AI-derived/
+/// operational); AppEntityColors answers "what type of thing is this" and is
+/// never used to convey status. The two never render in the same visual
+/// slot: entity color drives icon chips, page/section accents, and a card's
+/// identity stripe; status color still drives badges and health chips. Kept
+/// out of AppStatusColors so a future status color never has to dodge nine
+/// more reserved hues, and so "purple always means AI" (see
+/// [AppStatusColors]'s doc comment) stays true without exception.
+///
+/// [technology] intentionally reuses [AppStatusColors.technology] rather
+/// than introducing a competing cyan — the Technology entity type and
+/// "tech-specific content" are the same concept everywhere else in the app,
+/// so this is the one deliberate overlap.
+class AppEntityColors {
+  const AppEntityColors._();
+
+  static const Color businessUnit = Color(0xFF3F51B5);
+  static const Color product = Color(0xFFC2185B);
+  static const Color service = Color(0xFF6D4C41);
+  static const Color capability = Color(0xFFB8860B);
+  static const Color technology = AppStatusColors.technology;
+  static const Color industry = Color(0xFF55795A);
+  static const Color experience = Color(0xFF8E3B46);
+  static const Color knowledgeBase = Color(0xFFA65E2E);
+  static const Color certification = Color(0xFF4A6FA5);
 }
 
 /// Central theme definition. Keeping this in one place means every screen
@@ -102,8 +164,16 @@ class AppTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         color: colorScheme.surfaceContainerLow,
+        // A hairline border (rather than raising elevation) gives cards a
+        // visible edge against the scaffold background without adding
+        // shadow noise — flat elevation-0 cards were reading as an
+        // undifferentiated grey wall since only the very slight
+        // surfaceContainerLow tint separated a card from the page.
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadii.card),
+          side: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+          ),
         ),
       ),
       appBarTheme: AppBarTheme(
@@ -178,6 +248,23 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.input),
           ),
+        ),
+      ),
+      // Baseline for every TabBar in the app (Opportunities' 3-tab strip,
+      // the Company Intelligence sub-tabs, etc.): a visible indicator plus a
+      // clear selected/unselected weight and opacity split, so a tab row
+      // reads as interactive even before a screen adds its own per-tab
+      // semantic accent color (see `opportunities_screen.dart`'s
+      // `_kTabColors` — that per-tab coloring layers on top of, rather than
+      // replaces, this baseline).
+      tabBarTheme: TabBarThemeData(
+        dividerColor: colorScheme.outlineVariant.withValues(alpha: 0.4),
+        indicatorSize: TabBarIndicatorSize.label,
+        labelColor: colorScheme.primary,
+        unselectedLabelColor: colorScheme.onSurfaceVariant,
+        labelStyle: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+        unselectedLabelStyle: textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w500,
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(

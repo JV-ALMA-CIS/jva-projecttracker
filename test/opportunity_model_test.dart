@@ -277,4 +277,60 @@ void main() {
       expect(restored.discoverySourceType, isNull);
     },
   );
+
+  test('Opportunity round-trips sourceUrlVerified and sourceUrlVerifiedAt', () {
+    final now = DateTime.utc(2024, 6, 1);
+    final verifiedAt = DateTime.utc(2024, 6, 2);
+    final opportunity = Opportunity(
+      id: 'opportunity-5',
+      title: 'Verified tender',
+      description: 'A tender whose sourceUrl was confirmed reachable',
+      sourceUrl: 'https://example.com/tender/5',
+      sourceUrlVerified: true,
+      sourceUrlVerifiedAt: verifiedAt,
+      discoveredAt: now,
+      updatedAt: now,
+    );
+
+    final restored = Opportunity.fromMap(opportunity.id, opportunity.toMap());
+
+    expect(restored.sourceUrlVerified, isTrue);
+    expect(restored.sourceUrlVerifiedAt?.toUtc(), verifiedAt.toUtc());
+  });
+
+  test('Opportunity defaults sourceUrlVerified to false — a legacy document '
+      'predating this field was never actually checked, so it must not be '
+      'silently treated as verified', () {
+    final now = DateTime.utc(2024, 6, 1);
+    final restored = Opportunity.fromMap('opportunity-6', {
+      'title': 'Legacy opportunity',
+      'description': 'Discovered before sourceUrlVerified existed',
+      'sourceUrl': 'https://example.com/tender/6',
+      'status': 'discovered',
+      'fitScorePercent': 50,
+      'discoveredAt': Timestamp.fromDate(now),
+      'updatedAt': Timestamp.fromDate(now),
+    });
+
+    expect(restored.sourceUrlVerified, isFalse);
+    expect(restored.sourceUrlVerifiedAt, isNull);
+  });
+
+  test(
+    'a freshly-constructed Opportunity with no explicit sourceUrlVerified defaults to false',
+    () {
+      final now = DateTime.utc(2024, 6, 1);
+      final opportunity = Opportunity(
+        id: 'opportunity-7',
+        title: 'New opportunity',
+        description: '',
+        sourceUrl: 'https://example.com/tender/7',
+        discoveredAt: now,
+        updatedAt: now,
+      );
+
+      expect(opportunity.sourceUrlVerified, isFalse);
+      expect(opportunity.sourceUrlVerifiedAt, isNull);
+    },
+  );
 }

@@ -35,6 +35,7 @@ class SubmissionsScreen extends ConsumerWidget {
             child: PageHeader(
               icon: Icons.send_outlined,
               title: strings.submissionsSectionTitle,
+              accentColor: AppStatusColors.info,
             ),
           ),
           Expanded(

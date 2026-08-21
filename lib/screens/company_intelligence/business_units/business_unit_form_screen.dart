@@ -155,7 +155,10 @@ class _BusinessUnitFormScreenState
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
-          SectionHeader(title: strings.sectionDetails),
+          SectionHeader(
+            title: strings.sectionDetails,
+            accentColor: AppStatusColors.neutral,
+          ),
           TextFormField(
             controller: _nameController,
             autofocus: !_isEditing,

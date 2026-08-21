@@ -1,7 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jva_projecttracker/models/company_intelligence/business_unit.dart';
 import 'package:jva_projecttracker/models/opportunity.dart';
 import 'package:jva_projecttracker/models/tender_source.dart';
 import 'package:jva_projecttracker/services/opportunity_filters.dart';
+
+BusinessUnit _businessUnit(String id, String name) {
+  final now = DateTime.utc(2024, 1, 1);
+  return BusinessUnit(
+    id: id,
+    name: name,
+    slug: id,
+    createdAt: now,
+    updatedAt: now,
+  );
+}
 
 Opportunity _opportunity({
   String id = 'opp-1',
@@ -80,6 +92,143 @@ void main() {
       );
       expect(matchesBuFilter(_opportunity(), filter), isFalse);
     });
+
+    test(
+      'specific soft-matches an untagged embassy roof opportunity under Construction',
+      () {
+        final filter = OpportunityBuFilter.specific('bu-1', 'Construction');
+        final embassyRoof = _opportunity(
+          title: 'US Embassy Rosslyn Compound Roof Replacement RFQ',
+        );
+        expect(matchesBuFilter(embassyRoof, filter), isTrue);
+      },
+    );
+
+    test(
+      'specific soft-matches the SAME untagged embassy roof opportunity under Embassy & Diplomatic Facilities too',
+      () {
+        final filter = OpportunityBuFilter.specific(
+          'bu-6',
+          'Embassy & Diplomatic Facilities',
+        );
+        final embassyRoof = _opportunity(
+          title: 'US Embassy Rosslyn Compound Roof Replacement RFQ',
+        );
+        expect(matchesBuFilter(embassyRoof, filter), isTrue);
+      },
+    );
+
+    test(
+      'specific soft-match never overrides an explicit, different BU tag set',
+      () {
+        final filter = OpportunityBuFilter.specific('bu-1', 'Construction');
+        final taggedElsewhere = _opportunity(
+          title: 'US Embassy Rosslyn Compound Roof Replacement RFQ',
+          businessUnitIds: const ['bu-9'],
+        );
+        expect(matchesBuFilter(taggedElsewhere, filter), isFalse);
+      },
+    );
+
+    test('specific soft-match requires a businessUnitName to be provided', () {
+      final filter = OpportunityBuFilter.specific('bu-1');
+      final embassyRoof = _opportunity(title: 'Embassy roof RFQ');
+      expect(matchesBuFilter(embassyRoof, filter), isFalse);
+    });
+
+    test('soft-inclusion applies the same way to every BU', () {
+      final facilityFilter = OpportunityBuFilter.specific(
+        'bu-2',
+        'Facility Management',
+      );
+      final maintenanceOpp = _opportunity(
+        title: 'Facility Management building services contract',
+      );
+      expect(matchesBuFilter(maintenanceOpp, facilityFilter), isTrue);
+    });
+  });
+
+  group('matchesBuSoftKeywords', () {
+    test(
+      'matches embassy/diplomatic/ambassador text for Embassy & Diplomatic Facilities',
+      () {
+        expect(
+          matchesBuSoftKeywords(
+            _opportunity(title: 'Ambassador residence renovation'),
+            'Embassy & Diplomatic Facilities',
+          ),
+          isTrue,
+        );
+        expect(
+          matchesBuSoftKeywords(
+            _opportunity(title: 'US Embassy Rosslyn Compound Roof RFQ'),
+            'Embassy & Diplomatic Facilities',
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('matches roof/renovation text for Construction', () {
+      expect(
+        matchesBuSoftKeywords(
+          _opportunity(title: 'US Embassy Rosslyn Compound Roof RFQ'),
+          'Construction',
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'an embassy roof RFQ matches Construction AND Embassy & Diplomatic Facilities simultaneously',
+      () {
+        final opp = _opportunity(
+          title: 'US Embassy Rosslyn Compound Roof Replacement RFQ',
+        );
+        expect(matchesBuSoftKeywords(opp, 'Construction'), isTrue);
+        expect(
+          matchesBuSoftKeywords(opp, 'Embassy & Diplomatic Facilities'),
+          isTrue,
+        );
+      },
+    );
+
+    test('an unlisted business unit name never soft-matches', () {
+      expect(
+        matchesBuSoftKeywords(
+          _opportunity(title: 'Embassy roof RFQ'),
+          'Some Unlisted BU',
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('sortBusinessUnitsForChips', () {
+    test(
+      'pins Construction, Facility Management, Embassy & Diplomatic Facilities first and Human Resources last',
+      () {
+        final input = [
+          _businessUnit('bu-hr', 'Human Resources'),
+          _businessUnit('bu-agri', 'Agribusiness'),
+          _businessUnit('bu-embassy', 'Embassy & Diplomatic Facilities'),
+          _businessUnit('bu-fm', 'Facility Management'),
+          _businessUnit('bu-it', 'Information Technology'),
+          _businessUnit('bu-con', 'Construction'),
+        ];
+
+        final sorted = sortBusinessUnitsForChips(input);
+
+        expect(sorted.map((b) => b.name).toList(), [
+          'Construction',
+          'Facility Management',
+          'Embassy & Diplomatic Facilities',
+          'Agribusiness',
+          'Information Technology',
+          'Human Resources',
+        ]);
+      },
+    );
   });
 
   group('matchesValueBand', () {

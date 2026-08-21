@@ -10,12 +10,13 @@ import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/adaptive_list_grid.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/entity_card.dart';
+import 'package:jva_projecttracker/widgets/page_back_button.dart';
 import 'package:jva_projecttracker/widgets/page_header.dart';
 import 'package:jva_projecttracker/widgets/status_badge.dart';
 
 Color _statusColor(KnowledgeArticleStatus status) => switch (status) {
   KnowledgeArticleStatus.active => AppStatusColors.success,
-  KnowledgeArticleStatus.archived => Colors.grey,
+  KnowledgeArticleStatus.archived => AppStatusColors.neutral,
 };
 
 class KnowledgeBaseScreen extends ConsumerStatefulWidget {
@@ -59,8 +60,11 @@ class _KnowledgeBaseScreenState extends ConsumerState<KnowledgeBaseScreen> {
     final articlesAsync = ref.watch(knowledgeArticlesStreamProvider);
 
     return Scaffold(
-      appBar: AppBar(),
       floatingActionButton: FloatingActionButton(
+        // heroTag: null avoids a hero-tag collision with other screens'
+        // FABs when two Scaffolds are briefly mounted together (e.g.
+        // HomeShell's tab-switch AnimatedSwitcher).
+        heroTag: null,
         onPressed: () => pushSlideFade(context, const KnowledgeFormScreen()),
         child: const Icon(Icons.add),
       ),
@@ -78,9 +82,11 @@ class _KnowledgeBaseScreenState extends ConsumerState<KnowledgeBaseScreen> {
                       0,
                     ),
                     child: PageHeader(
+                      leading: PageBackButton(),
                       icon: Icons.menu_book_outlined,
                       title: strings.knowledgeBaseTitle,
                       subtitle: strings.knowledgeBaseSubtitle,
+                      accentColor: AppEntityColors.knowledgeBase,
                     ),
                   ),
                   Expanded(
@@ -115,9 +121,11 @@ class _KnowledgeBaseScreenState extends ConsumerState<KnowledgeBaseScreen> {
                     0,
                   ),
                   child: PageHeader(
+                    leading: PageBackButton(),
                     icon: Icons.menu_book_outlined,
                     title: strings.knowledgeBaseTitle,
                     subtitle: strings.knowledgeBaseSubtitle,
+                    accentColor: AppEntityColors.knowledgeBase,
                   ),
                 ),
                 Padding(
@@ -185,6 +193,7 @@ class _KnowledgeBaseScreenState extends ConsumerState<KnowledgeBaseScreen> {
                               label: a.status.label,
                               color: _statusColor(a.status),
                             ),
+                            accentColor: AppEntityColors.knowledgeBase,
                             metaChips: [
                               if (a.category.isNotEmpty)
                                 Chip(

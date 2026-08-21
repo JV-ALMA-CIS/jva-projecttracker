@@ -16,6 +16,13 @@ import 'package:jva_projecttracker/models/project.dart';
 import 'package:jva_projecttracker/models/proposal.dart';
 import 'package:jva_projecttracker/models/submission.dart';
 import 'package:jva_projecttracker/screens/company_intelligence/business_units/business_unit_form_screen.dart';
+import 'package:jva_projecttracker/screens/company_intelligence/capabilities/capability_workspace_screen.dart';
+import 'package:jva_projecttracker/screens/company_intelligence/experiences/experience_workspace_screen.dart';
+import 'package:jva_projecttracker/screens/company_intelligence/industries/industry_workspace_screen.dart';
+import 'package:jva_projecttracker/screens/company_intelligence/knowledge_base/knowledge_article_workspace_screen.dart';
+import 'package:jva_projecttracker/screens/company_intelligence/products/product_workspace_screen.dart';
+import 'package:jva_projecttracker/screens/company_intelligence/services/service_workspace_screen.dart';
+import 'package:jva_projecttracker/screens/company_intelligence/technologies/technology_workspace_screen.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunity_workspace_screen.dart';
 import 'package:jva_projecttracker/screens/projects/project_workspace_screen.dart';
 import 'package:jva_projecttracker/screens/proposals/proposal_workspace_screen.dart';
@@ -26,10 +33,13 @@ import 'package:jva_projecttracker/services/business_unit_summary_service.dart';
 import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/theme/app_page_route.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
+import 'package:jva_projecttracker/widgets/page_back_button.dart';
+import 'package:jva_projecttracker/widgets/page_header.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/fit_score_badge.dart';
 import 'package:jva_projecttracker/widgets/pipeline_stage_badge.dart';
 import 'package:jva_projecttracker/widgets/recommendation_card.dart';
+import 'package:jva_projecttracker/widgets/related_entity_section.dart';
 import 'package:jva_projecttracker/widgets/section_header.dart';
 import 'package:jva_projecttracker/widgets/stat_card.dart';
 import 'package:jva_projecttracker/widgets/stat_card_row.dart';
@@ -62,24 +72,41 @@ class BusinessUnitWorkspaceScreen extends ConsumerWidget {
     );
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(strings.businessUnitsTitle),
-        actions: [
-          IconButton(
-            onPressed: () => pushSlideFade(
-              context,
-              BusinessUnitFormScreen(businessUnitId: businessUnitId),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                0,
+              ),
+              child: PageHeader(
+                leading: PageBackButton(),
+                title: strings.businessUnitsTitle,
+                action: IconButton(
+                  onPressed: () => pushSlideFade(
+                    context,
+                    BusinessUnitFormScreen(businessUnitId: businessUnitId),
+                  ),
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: strings.editButton,
+                ),
+              ),
             ),
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: strings.editButton,
-          ),
-        ],
-      ),
-      body: businessUnitAsync.when(
-        data: (unit) =>
-            unit == null ? const SizedBox.shrink() : _Body(businessUnit: unit),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text(strings.errorPrefix(error))),
+            Expanded(
+              child: businessUnitAsync.when(
+                data: (unit) => unit == null
+                    ? const SizedBox.shrink()
+                    : _Body(businessUnit: unit),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) =>
+                    Center(child: Text(strings.errorPrefix(error))),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -189,7 +216,10 @@ class _BodyState extends ConsumerState<_Body> {
         ],
         if (recommendations.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.aiRecommendationsSectionTitle),
+          SectionHeader(
+            title: strings.aiRecommendationsSectionTitle,
+            accentColor: AppStatusColors.ai,
+          ),
           for (final r in recommendations)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -203,76 +233,122 @@ class _BodyState extends ConsumerState<_Body> {
         ],
         if (activeOpportunities.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.activeOpportunitiesSectionTitle),
+          SectionHeader(
+            title: strings.activeOpportunitiesSectionTitle,
+            accentColor: AppStatusColors.info,
+          ),
           _buildOpportunities(context, activeOpportunities),
         ],
         if (proposals.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.proposalPipelineSectionTitle),
+          SectionHeader(
+            title: strings.proposalPipelineSectionTitle,
+            accentColor: AppStatusColors.info,
+          ),
           _buildProposals(context, strings, ref, proposals),
         ],
         if (submissions.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.submissionsSectionTitle),
+          SectionHeader(
+            title: strings.submissionsSectionTitle,
+            accentColor: AppStatusColors.info,
+          ),
           _buildSubmissions(context, strings, submissions, opportunities),
         ],
         if (activeProjects.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.activeProjectsSectionTitle),
+          SectionHeader(
+            title: strings.activeProjectsSectionTitle,
+            accentColor: AppStatusColors.operations,
+          ),
           _buildProjects(context, activeProjects),
         ],
         if (completedProjects.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.completedProjectsSectionTitle),
+          SectionHeader(
+            title: strings.completedProjectsSectionTitle,
+            accentColor: AppStatusColors.operations,
+          ),
           _buildProjects(context, completedProjects),
         ],
         if (recentEvents.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.recentActivitySectionTitle),
+          SectionHeader(
+            title: strings.recentActivitySectionTitle,
+            accentColor: AppStatusColors.neutral,
+          ),
           _buildActivity(context, strings, recentEvents),
         ],
         const SizedBox(height: AppSpacing.xl),
-        _buildRelatedEntitySection<Product>(
-          context,
-          strings.productsTitle,
-          products,
-          (p) => p.name,
+        RelatedEntitySection<Product>(
+          title: strings.productsTitle,
+          items: products,
+          nameOf: (p) => p.name,
+          accentColor: AppEntityColors.product,
+          onTap: (p) => pushSlideFade(
+            context,
+            ProductWorkspaceScreen(productId: p.id),
+          ),
         ),
-        _buildRelatedEntitySection<ServiceModel>(
-          context,
-          strings.servicesTitle,
-          services,
-          (s) => s.name,
+        RelatedEntitySection<ServiceModel>(
+          title: strings.servicesTitle,
+          items: services,
+          nameOf: (s) => s.name,
+          accentColor: AppEntityColors.service,
+          onTap: (s) => pushSlideFade(
+            context,
+            ServiceWorkspaceScreen(serviceId: s.id),
+          ),
         ),
-        _buildRelatedEntitySection<Capability>(
-          context,
-          strings.capabilitiesTitle,
-          capabilities,
-          (c) => c.name,
+        RelatedEntitySection<Capability>(
+          title: strings.capabilitiesTitle,
+          items: capabilities,
+          nameOf: (c) => c.name,
+          accentColor: AppEntityColors.capability,
+          onTap: (c) => pushSlideFade(
+            context,
+            CapabilityWorkspaceScreen(capabilityId: c.id),
+          ),
         ),
-        _buildRelatedEntitySection<Technology>(
-          context,
-          strings.technologiesTitle,
-          technologies,
-          (t) => t.name,
+        RelatedEntitySection<Technology>(
+          title: strings.technologiesTitle,
+          items: technologies,
+          nameOf: (t) => t.name,
+          accentColor: AppEntityColors.technology,
+          onTap: (t) => pushSlideFade(
+            context,
+            TechnologyWorkspaceScreen(technologyId: t.id),
+          ),
         ),
-        _buildRelatedEntitySection<Industry>(
-          context,
-          strings.industriesTitle,
-          industries,
-          (i) => i.name,
+        RelatedEntitySection<Industry>(
+          title: strings.industriesTitle,
+          items: industries,
+          nameOf: (i) => i.name,
+          accentColor: AppEntityColors.industry,
+          onTap: (i) => pushSlideFade(
+            context,
+            IndustryWorkspaceScreen(industryId: i.id),
+          ),
         ),
-        _buildRelatedEntitySection<Experience>(
-          context,
-          strings.experiencesTitle,
-          experiences,
-          (e) => e.title,
+        RelatedEntitySection<Experience>(
+          title: strings.experiencesTitle,
+          items: experiences,
+          nameOf: (e) => e.title,
+          accentColor: AppEntityColors.experience,
+          onTap: (e) => pushSlideFade(
+            context,
+            ExperienceWorkspaceScreen(experienceId: e.id),
+          ),
         ),
-        _buildRelatedEntitySection<KnowledgeArticle>(
-          context,
-          strings.knowledgeBaseTitle,
-          knowledgeArticles,
-          (a) => a.title,
+        RelatedEntitySection<KnowledgeArticle>(
+          title: strings.knowledgeBaseTitle,
+          items: knowledgeArticles,
+          nameOf: (a) => a.title,
+          accentColor: AppEntityColors.knowledgeBase,
+          onTap: (a) => pushSlideFade(
+            context,
+            KnowledgeArticleWorkspaceScreen(articleId: a.id),
+          ),
         ),
         const SizedBox(height: AppSpacing.xxl),
       ],
@@ -642,37 +718,4 @@ class _BodyState extends ConsumerState<_Body> {
     );
   }
 
-  Widget _buildRelatedEntitySection<T>(
-    BuildContext context,
-    String title,
-    List<T> items,
-    String Function(T) nameOf,
-  ) {
-    if (items.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: ExpansionTile(
-          title: Text(title),
-          subtitle: Text('${items.length}'),
-          childrenPadding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            0,
-            AppSpacing.lg,
-            AppSpacing.lg,
-          ),
-          children: [
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                for (final item in items) Chip(label: Text(nameOf(item))),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

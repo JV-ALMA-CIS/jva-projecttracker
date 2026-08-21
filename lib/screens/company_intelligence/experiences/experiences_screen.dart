@@ -10,12 +10,13 @@ import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/adaptive_list_grid.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/entity_card.dart';
+import 'package:jva_projecttracker/widgets/page_back_button.dart';
 import 'package:jva_projecttracker/widgets/page_header.dart';
 import 'package:jva_projecttracker/widgets/status_badge.dart';
 
 Color _statusColor(ExperienceStatus status) => switch (status) {
   ExperienceStatus.active => AppStatusColors.success,
-  ExperienceStatus.archived => Colors.grey,
+  ExperienceStatus.archived => AppStatusColors.neutral,
 };
 
 class ExperiencesScreen extends ConsumerStatefulWidget {
@@ -59,8 +60,11 @@ class _ExperiencesScreenState extends ConsumerState<ExperiencesScreen> {
     final experiencesAsync = ref.watch(experiencesStreamProvider);
 
     return Scaffold(
-      appBar: AppBar(),
       floatingActionButton: FloatingActionButton(
+        // heroTag: null avoids a hero-tag collision with other screens'
+        // FABs when two Scaffolds are briefly mounted together (e.g.
+        // HomeShell's tab-switch AnimatedSwitcher).
+        heroTag: null,
         onPressed: () => pushSlideFade(context, const ExperienceFormScreen()),
         child: const Icon(Icons.add),
       ),
@@ -78,9 +82,11 @@ class _ExperiencesScreenState extends ConsumerState<ExperiencesScreen> {
                       0,
                     ),
                     child: PageHeader(
+                      leading: PageBackButton(),
                       icon: Icons.military_tech_outlined,
                       title: strings.experiencesTitle,
                       subtitle: strings.experiencesSubtitle,
+                      accentColor: AppEntityColors.experience,
                     ),
                   ),
                   Expanded(
@@ -117,9 +123,11 @@ class _ExperiencesScreenState extends ConsumerState<ExperiencesScreen> {
                     0,
                   ),
                   child: PageHeader(
+                    leading: PageBackButton(),
                     icon: Icons.military_tech_outlined,
                     title: strings.experiencesTitle,
                     subtitle: strings.experiencesSubtitle,
+                    accentColor: AppEntityColors.experience,
                   ),
                 ),
                 Padding(
@@ -189,6 +197,7 @@ class _ExperiencesScreenState extends ConsumerState<ExperiencesScreen> {
                               label: e.status.label,
                               color: _statusColor(e.status),
                             ),
+                            accentColor: AppEntityColors.experience,
                             metaChips: [
                               if (e.country != null && e.country!.isNotEmpty)
                                 Chip(

@@ -72,6 +72,7 @@ class _DocumentLibraryScreenState extends ConsumerState<DocumentLibraryScreen> {
               icon: Icons.folder_open_outlined,
               title: strings.documentLibraryTitle,
               subtitle: null,
+              accentColor: AppStatusColors.neutral,
             ),
           ),
           Padding(
@@ -107,6 +108,10 @@ class _DocumentLibraryScreenState extends ConsumerState<DocumentLibraryScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        // heroTag: null avoids a hero-tag collision with other screens'
+        // FABs when two Scaffolds are briefly mounted together (e.g.
+        // HomeShell's tab-switch AnimatedSwitcher).
+        heroTag: null,
         onPressed: () => showDialog<void>(
           context: context,
           builder: (_) => _AddDocumentDialog(proposalId: widget.proposalId),

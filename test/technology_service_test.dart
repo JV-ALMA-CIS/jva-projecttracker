@@ -31,6 +31,27 @@ void main() {
     );
   }
 
+  /// Like [buildTechnology], but leaves `slug` blank — the shape a plain
+  /// name-only entry actually takes (e.g. the Product form's "+ Add
+  /// Technology" quick-create, which never touches the Technology form's
+  /// slug field), so [TechnologyService.create]'s own [slugify]-derived
+  /// slug is what actually gets stored. [buildTechnology] itself always
+  /// sets a non-empty, non-normalized `slug` (`name.toLowerCase()`, not run
+  /// through [slugify]), which is deliberately realistic for the tests that
+  /// exercise plain create/update/delete — but wrong for dedup tests, which
+  /// need the persisted slug to be the actual normalization key so a second
+  /// create's lookup can find the first record.
+  Technology buildBareTechnology({String name = 'Flutter'}) {
+    final now = DateTime.utc(2024, 5, 1);
+    return Technology(
+      id: '',
+      name: name,
+      slug: '',
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
   test('create writes a document that watchAll then returns', () async {
     final id = await service.create(buildTechnology());
 
@@ -60,6 +81,66 @@ void main() {
 
     final doc = await service.watchById(id).first;
     expect(doc, isNull);
+  });
+
+  test('create is independently usable — no Historical Project/document/AI '
+      'extraction required, just a name', () async {
+    final id = await service.create(buildTechnology(name: 'Flutter'));
+    final all = await service.watchAll().first;
+    expect(all, hasLength(1));
+    expect(all.single.id, id);
+  });
+
+  test(
+    'create skips writing a duplicate when a Technology with the same '
+    'normalized name already exists, returning the existing id instead',
+    () async {
+      final firstId = await service.create(
+        buildBareTechnology(name: 'Flutter'),
+      );
+
+      final secondId = await service.create(
+        buildBareTechnology(name: 'flutter'),
+      );
+
+      expect(secondId, firstId);
+      final all = await service.watchAll().first;
+      expect(all, hasLength(1));
+    },
+  );
+
+  test('duplicate detection ignores casing/whitespace differences via slugify '
+      'normalization', () async {
+    final firstId = await service.create(
+      buildBareTechnology(name: 'Google Gemini AI'),
+    );
+
+    final secondId = await service.create(
+      buildBareTechnology(name: '  Google   Gemini AI  '),
+    );
+
+    expect(secondId, firstId);
+    final all = await service.watchAll().first;
+    expect(all, hasLength(1));
+  });
+
+  test('distinct technologies with different names are both created', () async {
+    final flutterId = await service.create(
+      buildBareTechnology(name: 'Flutter'),
+    );
+    final firebaseId = await service.create(
+      buildBareTechnology(name: 'Firebase'),
+    );
+
+    expect(flutterId, isNot(firebaseId));
+    final all = await service.watchAll().first;
+    expect(all, hasLength(2));
+  });
+
+  test('findByNormalizedName returns null when nothing matches', () async {
+    await service.create(buildTechnology(name: 'Flutter'));
+    final found = await service.findByNormalizedName('Firebase');
+    expect(found, isNull);
   });
 
   test('watchAll orders by updatedAt descending', () async {

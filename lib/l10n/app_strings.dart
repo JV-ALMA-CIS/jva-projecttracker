@@ -246,6 +246,11 @@ class AppStrings {
   String get noBusinessUnitsYet => _it
       ? 'Nessuna business unit ancora registrata.'
       : 'No business units registered yet.';
+  String get searchBusinessUnitsHint =>
+      _it ? 'Cerca business unit…' : 'Search business units…';
+  String get noBusinessUnitsMatchFilter => _it
+      ? 'Nessuna business unit corrisponde alla ricerca.'
+      : 'No business units match your search.';
   String get businessUnitDetailsTitle =>
       _it ? 'Dettagli business unit' : 'Business unit details';
   String get fieldBusinessUnitName =>
@@ -263,6 +268,10 @@ class AppStrings {
   String get noProductsYet => _it
       ? 'Nessun prodotto ancora registrato.'
       : 'No products registered yet.';
+  String get searchProductsHint => _it ? 'Cerca prodotti…' : 'Search products…';
+  String get noProductsMatchFilter => _it
+      ? 'Nessun prodotto corrisponde alla ricerca.'
+      : 'No products match your search.';
   String get newProductTitle => _it ? 'Nuovo prodotto' : 'New Product';
   String get editProductTitle => _it ? 'Modifica prodotto' : 'Edit Product';
   String get fieldProductName => _it ? 'Nome prodotto' : 'Product name';
@@ -288,6 +297,85 @@ class AppStrings {
   String get deleteProductConfirmBody => _it
       ? 'Eliminare questo prodotto? L\'azione non può essere annullata.'
       : 'Delete this product? This cannot be undone.';
+
+  // Certifications (company-level eligibility, not project evidence)
+  String get certificationsTitle => _it ? 'Certificazioni' : 'Certifications';
+  String get certificationsSubtitle => _it
+      ? 'Idoneità aziendale — es. classe NCA, conformità fiscale, ISO. Non sono prove di progetto.'
+      : 'Company-level eligibility — e.g. NCA class, tax compliance, ISO. Not project delivery evidence.';
+  String get noCertificationsYet => _it
+      ? 'Nessuna certificazione ancora registrata.'
+      : 'No certifications registered yet.';
+  String get newCertificationTitle =>
+      _it ? 'Nuova certificazione' : 'New Certification';
+  String get editCertificationTitle =>
+      _it ? 'Modifica certificazione' : 'Edit Certification';
+  String get fieldCertificationName =>
+      _it ? 'Nome certificazione' : 'Certification name';
+  String get fieldCertificationType => _it ? 'Tipo' : 'Type';
+  String get fieldCertificationGrade =>
+      _it ? 'Classe / grado' : 'Grade / class';
+  String get fieldCertificationIssuingBody =>
+      _it ? 'Ente emittente' : 'Issuing body';
+  String get fieldCertificationNumber =>
+      _it ? 'Numero certificato' : 'Certificate number';
+  String get fieldCertificationIssueDate =>
+      _it ? 'Data di emissione' : 'Issue date';
+  String get fieldCertificationExpiryDate =>
+      _it ? 'Data di scadenza' : 'Expiry date';
+  String get fieldCertificationDocument =>
+      _it ? 'Documento a supporto' : 'Supporting document';
+  String get noDocumentSelectedLabel =>
+      _it ? 'Nessun documento selezionato' : 'No document selected';
+  String get selectDocumentButton =>
+      _it ? 'Seleziona documento' : 'Select document';
+  String get deleteCertificationConfirmBody => _it
+      ? 'Eliminare questa certificazione? L\'azione non può essere annullata.'
+      : 'Delete this certification? This cannot be undone.';
+  String get certificationExpiredLabel => _it ? 'Scaduta' : 'Expired';
+  String certificationTypeLabel(dynamic type) {
+    final name = type.toString().split('.').last;
+    return switch (name) {
+      'nca' => _it ? 'Registrazione NCA' : 'NCA Registration',
+      'tax' => _it ? 'Conformità fiscale' : 'Tax Compliance',
+      'agpo' => 'AGPO',
+      'iso' => _it ? 'Certificazione ISO' : 'ISO Certification',
+      'businessPermit' => _it ? 'Licenza commerciale' : 'Business Permit',
+      'professionalLicense' =>
+        _it ? 'Licenza professionale' : 'Professional License',
+      _ => _it ? 'Altro' : 'Other',
+    };
+  }
+
+  // Opportunity eligibility (certification requirements + gaps)
+  String get eligibilitySectionTitle => _it ? 'Idoneità' : 'Eligibility';
+  String get eligibilitySectionCaption => _it
+      ? 'Idoneità aziendale richiesta dalla gara, confrontata con le certificazioni detenute.'
+      : 'Company eligibility the tender requires, checked against certifications held.';
+  String get noRequirementsRecordedMessage => _it
+      ? 'Nessun requisito di certificazione registrato per questa opportunità.'
+      : 'No certification requirements recorded for this opportunity.';
+  String get noEligibilityGapsMessage => _it
+      ? 'Nessuna lacuna di idoneità rilevata.'
+      : 'No eligibility gaps detected.';
+  String get addRequirementButton =>
+      _it ? 'Aggiungi requisito' : 'Add requirement';
+  String get removeRequirementTooltip => _it ? 'Rimuovi' : 'Remove';
+  String get requiredGradeOptionalHint => _it
+      ? 'Classe/grado richiesto (facoltativo)'
+      : 'Required grade/class (optional)';
+  String get viewCertificationsButton =>
+      _it ? 'Vedi certificazioni' : 'View certifications';
+  String certificationsActiveCountLabel(int count) =>
+      _it ? '$count attive' : '$count active';
+  String get certificationsNoneHeldLabel =>
+      _it ? 'Nessuna detenuta' : 'None held';
+  String get searchCertificationsHint =>
+      _it ? 'Cerca certificazioni…' : 'Search certifications…';
+  String get noCertificationsMatchFilter => _it
+      ? 'Nessuna certificazione corrisponde alla ricerca.'
+      : 'No certifications match your search.';
+
   String get servicesTitle => _it ? 'Servizi' : 'Services';
   String get servicesSubtitle => _it
       ? 'Servizi professionali offerti oltre ai prodotti software.'
@@ -295,6 +383,10 @@ class AppStrings {
   String get noServicesYet => _it
       ? 'Nessun servizio ancora registrato.'
       : 'No services registered yet.';
+  String get searchServicesHint => _it ? 'Cerca servizi…' : 'Search services…';
+  String get noServicesMatchFilter => _it
+      ? 'Nessun servizio corrisponde alla ricerca.'
+      : 'No services match your search.';
   String get newServiceTitle => _it ? 'Nuovo servizio' : 'New Service';
   String get editServiceTitle => _it ? 'Modifica servizio' : 'Edit Service';
   String get fieldServiceName => _it ? 'Nome servizio' : 'Service name';
@@ -307,6 +399,11 @@ class AppStrings {
   String get noCapabilitiesYet => _it
       ? 'Nessuna competenza ancora registrata.'
       : 'No capabilities registered yet.';
+  String get searchCapabilitiesHint =>
+      _it ? 'Cerca competenze…' : 'Search capabilities…';
+  String get noCapabilitiesMatchFilter => _it
+      ? 'Nessuna competenza corrisponde alla ricerca.'
+      : 'No capabilities match your search.';
   String get newCapabilityTitle => _it ? 'Nuova competenza' : 'New Capability';
   String get editCapabilityTitle =>
       _it ? 'Modifica competenza' : 'Edit Capability';
@@ -359,6 +456,14 @@ class AppStrings {
       _it ? 'Competenze collegate' : 'Related capabilities';
   String get relatedTechnologiesLabel =>
       _it ? 'Tecnologie collegate' : 'Related technologies';
+  String get addTechnologyButton =>
+      _it ? 'Aggiungi tecnologia' : 'Add technology';
+  String get quickAddTechnologyTitle =>
+      _it ? 'Aggiungi tecnologia' : 'Add Technology';
+  String get quickAddTechnologyCaption => _it
+      ? 'Crea rapidamente una tecnologia mancante. Per gestire tutti i campi, usa Intelligence aziendale → Tecnologie.'
+      : 'Quickly create a missing technology. For full details, use Company Intelligence → Technologies.';
+  String get addTechnologyDialogButton => _it ? 'Crea' : 'Create';
   String get industriesTitle => _it ? 'Settori' : 'Industries';
   String get industriesSubtitle => _it
       ? 'I settori in cui l\'azienda opera o punta a espandersi.'
@@ -468,7 +573,24 @@ class AppStrings {
       _it ? 'Ricerca fallita: $error' : 'Search failed: $error';
   String get fitReasoningLabel =>
       _it ? 'Motivazione della corrispondenza' : 'Fit reasoning';
-  String get openSourceButton => _it ? 'Apri fonte' : 'Open source';
+  String get openSourceButton => _it ? 'Link IA' : 'AI-suggested link';
+  String get noValidExternalLinkMessage =>
+      _it ? 'Nessun link esterno valido' : 'No valid external link';
+  String get unverifiedSourceLinkTooltip => _it
+      ? 'Questo link non è stato confermato funzionante — l\'IA potrebbe averlo generato in modo errato. Apri con cautela.'
+      : 'This link hasn\'t been confirmed to work — it may have been generated incorrectly by AI. Open with caution.';
+  String get markLinkVerifiedButton =>
+      _it ? 'Segna come verificato' : 'Mark as verified';
+  String get linkMarkedVerifiedMessage =>
+      _it ? 'Link segnato come verificato' : 'Link marked as verified';
+  String get openSourceDashboardButton =>
+      _it ? 'Apri dashboard fonte' : 'Open source dashboard';
+  String get openSourceDashboardTooltip => _it
+      ? 'Apre la pagina reale del bando/fonte — sempre affidabile. Scorri o cerca il bando specifico lì.'
+      : 'Opens the source\'s real tender listing page — always reliable. Scroll or search there for the specific tender.';
+  String get noSourceDashboardMessage => _it
+      ? 'Nessuna dashboard della fonte registrata per questa opportunità'
+      : 'No source dashboard recorded for this opportunity';
   String get openWorkspaceButton =>
       _it ? 'Apri area di lavoro' : 'Open workspace';
   String get aiOverviewSectionTitle => _it ? 'Panoramica IA' : 'AI overview';
@@ -527,6 +649,39 @@ class AppStrings {
   String get seedBusinessUnitsTooltip => _it
       ? '1. Popola unità aziendali (amministratore)'
       : '1. Seed business units (admin)';
+  String get verifySourceUrlsTooltip =>
+      _it ? 'Verifica URL di origine' : 'Verify source URLs';
+  String sourceUrlVerificationResultMessage(int checked) =>
+      _it ? '$checked URL controllati' : '$checked source URLs checked';
+  String get bulkCleanupTooltip => _it
+      ? 'Elimina in blocco per parola chiave (amministratore)'
+      : 'Bulk delete by keyword (admin)';
+  String get bulkCleanupDialogTitle => _it
+      ? 'Elimina opportunità per parola chiave'
+      : 'Delete opportunities by keyword';
+  String get bulkCleanupDialogCaption => _it
+      ? 'Trova opportunità il cui titolo, cliente o URL contiene questa parola chiave (es. il nome di una fonte gara eliminata) e le elimina in blocco. Utile per ripulire opportunità rimaste orfane da una fonte già eliminata.'
+      : 'Finds opportunities whose title, client, or URL contains this keyword (e.g. a deleted tender source\'s name) and deletes them in bulk. Useful for cleaning up opportunities orphaned by an already-deleted source.';
+  String get bulkCleanupKeywordFieldLabel => _it ? 'Parola chiave' : 'Keyword';
+  String get bulkCleanupSelectAllLabel =>
+      _it ? 'Seleziona tutte le opportunità' : 'Select all opportunities';
+  String get bulkCleanupSelectAllCaption => _it
+      ? 'Ignora la parola chiave ed elimina ogni opportunità sulla piattaforma — usalo per ripartire da zero.'
+      : 'Ignores the keyword and deletes every opportunity on the platform — use this to start fresh.';
+  String get bulkCleanupSelectAllConfirmTitle =>
+      _it ? 'Eliminare tutte le opportunità?' : 'Delete all opportunities?';
+  String bulkCleanupSelectAllConfirmMessage(int count) => _it
+      ? 'Stai per eliminare definitivamente tutte le $count opportunità sulla piattaforma. Questa azione non può essere annullata.'
+      : 'You are about to permanently delete all $count opportunities on the platform. This cannot be undone.';
+  String bulkCleanupMatchCountLabel(int count) => _it
+      ? '$count opportunità corrispondenti'
+      : '$count matching opportunit${count == 1 ? 'y' : 'ies'}';
+  String get bulkCleanupNoMatchesMessage =>
+      _it ? 'Nessuna corrispondenza' : 'No matches';
+  String get bulkCleanupDeleteButton => _it ? 'Elimina tutte' : 'Delete all';
+  String bulkCleanupDeletedMessage(int count) => _it
+      ? '$count opportunità eliminate'
+      : '$count opportunit${count == 1 ? 'y' : 'ies'} deleted';
   String businessUnitSeedResultMessage(int created, int skipped) => _it
       ? '$created unità aziendali create, $skipped già esistenti'
       : '$created business units created, $skipped already existed';
@@ -631,6 +786,11 @@ class AppStrings {
       _it ? 'Articoli collegati' : 'Related knowledge articles';
   String get relatedCompanyKnowledgeLabel =>
       _it ? 'Conoscenza aziendale collegata' : 'Related company knowledge';
+  String get allCompanyKnowledgeSectionTitle =>
+      _it ? 'Tutta la conoscenza aziendale' : 'All company knowledge';
+  String moreItemsNeedAttentionLabel(int count) => _it
+      ? '+$count altri elementi richiedono attenzione'
+      : '+$count more need attention';
   String confidenceScoreChipLabel(int score) =>
       _it ? 'Fiducia: $score%' : 'Confidence: $score%';
   String relatedKnowledgeCount(int count) =>
@@ -638,6 +798,7 @@ class AppStrings {
   String get notSetLabel => _it ? 'Non impostato' : 'Not set';
   String get cancelButton => _it ? 'Annulla' : 'Cancel';
   String get confirmButton => _it ? 'Conferma' : 'Confirm';
+  String get backButton => _it ? 'Indietro' : 'Back';
 
   // AI Opportunity Classification (Milestone 3.3)
   String get runAiClassificationButton =>
@@ -790,6 +951,7 @@ class AppStrings {
       _it ? 'Raccomandazioni AI' : 'AI Recommendations';
   String get aiRecommendationsSectionTitle =>
       _it ? 'Raccomandazioni AI' : 'AI Recommendations';
+  String get viewAllButton => _it ? 'Vedi tutte' : 'View all';
   String get viewAllRecommendationsButton => _it ? 'Vedi tutte' : 'View all';
   String get refreshRecommendationsButton =>
       _it ? 'Aggiorna raccomandazioni' : 'Refresh Recommendations';
@@ -1406,6 +1568,21 @@ class AppStrings {
 
   // --- Add as a new section, e.g. after the Discovery Sources/History strings ---
 
+  // Explore tab — cert-eligible / adjacent / growth opportunities outside
+  // the strict Pipeline wheelhouse (derived, no new Firestore field).
+  String get exploreTabLabel => _it ? 'Esplora' : 'Explore';
+  String get exploreEmptyTitle =>
+      _it ? 'Nessuna opportunità da esplorare' : 'Nothing to explore yet';
+  String get exploreEmptyCaption => _it
+      ? 'Aggiungi le certificazioni aziendali o attendi nuove scoperte per vedere qui le opportunità idonee o di crescita.'
+      : 'Add your company certifications, or wait for new discoveries, to see cert-eligible or growth opportunities here.';
+  String get certEligibleLabel =>
+      _it ? 'Idoneo per certificazione' : 'Cert eligible';
+  String get certGapLabel => _it ? 'Lacuna di certificazione' : 'Cert gap';
+  String get growthOpportunityLabel => _it ? 'Crescita' : 'Growth';
+  String get viewCertificationsCiButton =>
+      _it ? 'Vedi certificazioni' : 'View certifications';
+
   // Discovery Dashboard (Milestone 3.8b)
   String get discoveryDashboardTitle =>
       _it ? 'Motore di Discovery' : 'Discovery Engine';
@@ -1449,6 +1626,13 @@ class AppStrings {
   String seedResultMessage(int created, int skipped) => _it
       ? '$created nuove fonti create, $skipped già esistenti'
       : '$created new sources created, $skipped already existed';
+  String get runAllTenderSourcesButton => _it ? 'Esegui tutte' : 'Run all';
+  String get runAllTenderSourcesTooltip => _it
+      ? 'Esegui subito tutte le fonti gara abilitate'
+      : 'Run every enabled tender source now';
+  String runAllTenderSourcesQueuedMessage(int queued) => _it
+      ? '$queued fonti in coda — verranno eseguite in background. Controlla lo stato di ciascuna fonte o la Cronologia sincronizzazioni per i progressi.'
+      : '$queued sources queued — running in the background. Check each source\'s status or Sync History for progress.';
   String get addTenderSourceTitle =>
       _it ? 'Aggiungi fonte gara' : 'Add Tender Source';
   String get editTenderSourceTitle =>
@@ -1480,8 +1664,14 @@ class AppStrings {
   String get testingConnectionLabel => _it ? 'Verifica in corso…' : 'Testing…';
   String get deleteSourceButton => _it ? 'Elimina fonte' : 'Delete Source';
   String get deleteSourceConfirmMessage => _it
-      ? 'Eliminare questa fonte gara? Le opportunità già importate non verranno rimosse.'
-      : 'Delete this tender source? Opportunities already imported won\'t be removed.';
+      ? 'Eliminare questa fonte gara? Le opportunità già importate non verranno rimosse a meno che non sia selezionato di seguito.'
+      : 'Delete this tender source? Opportunities already imported won\'t be removed unless selected below.';
+  String get alsoDeleteSourceOpportunitiesLabel => _it
+      ? 'Elimina anche le opportunità già importate da questa fonte'
+      : 'Also delete opportunities already imported from this source';
+  String deletedSourceOpportunitiesMessage(int count) => _it
+      ? '$count opportunità eliminate'
+      : '$count opportunit${count == 1 ? 'y' : 'ies'} deleted';
   String get pauseSourceButton => _it ? 'Metti in pausa' : 'Pause';
   String get resumeSourceButton => _it ? 'Riprendi' : 'Resume';
   String get organizationProfileLabel =>

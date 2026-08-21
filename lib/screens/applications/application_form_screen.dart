@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/models/application.dart';
 import 'package:jva_projecttracker/services/providers.dart';
+import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/adaptive_form_row.dart';
 import 'package:jva_projecttracker/widgets/section_header.dart';
 import 'package:logger/logger.dart';
@@ -223,7 +224,10 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          SectionHeader(title: strings.sectionDetails),
+          SectionHeader(
+            title: strings.sectionDetails,
+            accentColor: AppStatusColors.neutral,
+          ),
           TextFormField(
             controller: _nameController,
             autofocus: !_isEditing,
@@ -243,6 +247,7 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
           const SizedBox(height: 24),
           SectionHeader(
             title: strings.sectionMarketDiscovery,
+            accentColor: AppStatusColors.ai,
             trailing: TextButton.icon(
               onPressed: _discovering ? null : _discoverApplicationAreas,
               icon: _discovering
@@ -302,7 +307,10 @@ class _ApplicationFormScreenState extends ConsumerState<ApplicationFormScreen> {
             ),
           ],
           const SizedBox(height: 24),
-          SectionHeader(title: strings.sectionPlatformTech),
+          SectionHeader(
+            title: strings.sectionPlatformTech,
+            accentColor: AppStatusColors.technology,
+          ),
           AdaptiveFieldRow(
             children: [
               TextFormField(

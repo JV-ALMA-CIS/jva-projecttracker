@@ -259,6 +259,7 @@ class _ProposalWorkspaceScreenState
               icon: Icons.description_outlined,
               title: strings.proposalWorkspaceTitle,
               subtitle: null,
+              accentColor: AppStatusColors.operations,
             ),
           ),
           Expanded(
@@ -347,7 +348,10 @@ class _ProposalWorkspaceScreenState
               const SizedBox(height: AppSpacing.lg),
               _buildSubmissionOverview(strings, opportunity, proposal),
               const SizedBox(height: AppSpacing.lg),
-              SectionHeader(title: strings.proposalProgressSectionTitle),
+              SectionHeader(
+                title: strings.proposalProgressSectionTitle,
+                accentColor: AppStatusColors.operations,
+              ),
               const SizedBox(height: AppSpacing.sm),
               ProposalProgressTracker(sections: sections),
               const SizedBox(height: AppSpacing.lg),

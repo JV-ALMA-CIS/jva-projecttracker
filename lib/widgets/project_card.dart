@@ -3,13 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/models/project.dart';
+import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/entity_card.dart';
 import 'package:jva_projecttracker/widgets/status_badge.dart';
 
+/// A running project is active operational/delivery work — [operations]
+/// (teal) rather than [success] (green is reserved for a completed
+/// positive *outcome*, e.g. Awarded/Won, not ongoing work in progress).
 Color _statusColor(ProjectStatus status) => switch (status) {
-  ProjectStatus.planned => Colors.blue,
-  ProjectStatus.running => Colors.green,
-  ProjectStatus.past => Colors.grey,
+  ProjectStatus.planned => AppStatusColors.info,
+  ProjectStatus.running => AppStatusColors.operations,
+  ProjectStatus.past => AppStatusColors.neutral,
 };
 
 class ProjectCard extends ConsumerWidget {

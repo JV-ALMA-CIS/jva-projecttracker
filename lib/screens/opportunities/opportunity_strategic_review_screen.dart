@@ -89,6 +89,7 @@ class _OpportunityStrategicReviewScreenState
                     child: PageHeader(
                       icon: Icons.fact_check_outlined,
                       title: strings.strategicReviewScreenTitle,
+                      accentColor: AppStatusColors.ai,
                     ),
                   ),
                   Expanded(child: _buildBody(context, strings, opportunity)),
@@ -140,7 +141,10 @@ class _OpportunityStrategicReviewScreenState
             opportunity.executiveRecommendation == null)
           Text(strings.noStrategicReviewYet)
         else ...[
-          SectionHeader(title: strings.aiRecommendationLabel),
+          SectionHeader(
+            title: strings.aiRecommendationLabel,
+            accentColor: AppStatusColors.ai,
+          ),
           if (opportunity.executiveRecommendation != null)
             Chip(
               label: Text(
@@ -153,7 +157,10 @@ class _OpportunityStrategicReviewScreenState
           StrategicDecisionPanel(opportunity: opportunity),
           const SizedBox(height: AppSpacing.lg),
           if (opportunity.executiveSummary?.isNotEmpty ?? false) ...[
-            SectionHeader(title: strings.executiveSummaryLabel),
+            SectionHeader(
+              title: strings.executiveSummaryLabel,
+              accentColor: AppStatusColors.ai,
+            ),
             Text(opportunity.executiveSummary!),
             const SizedBox(height: AppSpacing.xl),
           ],
@@ -242,7 +249,10 @@ class _OpportunityStrategicReviewScreenState
             nameOf: (a) => a.title,
           ),
           if (opportunity.proposalPositioningStrategy?.isNotEmpty ?? false) ...[
-            SectionHeader(title: strings.proposalPositioningStrategyLabel),
+            SectionHeader(
+              title: strings.proposalPositioningStrategyLabel,
+              accentColor: AppStatusColors.ai,
+            ),
             Text(opportunity.proposalPositioningStrategy!),
           ],
         ],

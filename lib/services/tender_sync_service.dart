@@ -40,4 +40,31 @@ class TenderSyncService {
       throw TenderSyncException(e.message ?? 'Sync failed');
     }
   }
+
+  /// Queues every enabled, non-manual `TenderSource` to run now, via the
+  /// `runAllTenderSourcesNow` callable — the bulk counterpart to
+  /// [runSource]. With 30+ sources configured, clicking "Run now" on each
+  /// one individually isn't workable, so this exists as the one-click
+  /// alternative on the Tender Sources screen. Admin-gated server-side.
+  ///
+  /// Returns as soon as the batch is queued (a few seconds), NOT once every
+  /// source has finished — the actual syncs continue running server-side
+  /// in the background after this returns (see the callable's doc comment
+  /// in functions/tenderSourceSync.js for why: 25 sources' worth of real
+  /// Gemini calls routinely takes well past what a callable can wait on).
+  /// Progress shows up live without polling this call: each source's
+  /// status updates as `tenderSourcesStreamProvider` refreshes, and every
+  /// attempt lands in Sync History.
+  Future<int> runAllSourcesNow() async {
+    try {
+      final callable = _functions.httpsCallable(
+        'runAllTenderSourcesNow',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
+      );
+      final result = await callable.call<Map<String, dynamic>>();
+      return result.data['queued'] as int? ?? 0;
+    } on FirebaseFunctionsException catch (e) {
+      throw TenderSyncException(e.message ?? 'Sync failed');
+    }
+  }
 }

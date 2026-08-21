@@ -10,39 +10,109 @@ import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/adaptive_list_grid.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/entity_card.dart';
+import 'package:jva_projecttracker/widgets/page_back_button.dart';
 import 'package:jva_projecttracker/widgets/page_header.dart';
 import 'package:jva_projecttracker/widgets/status_badge.dart';
 
 Color _statusColor(ServiceStatus status) => switch (status) {
   ServiceStatus.active => AppStatusColors.success,
-  ServiceStatus.archived => Colors.grey,
+  ServiceStatus.archived => AppStatusColors.neutral,
 };
 
-class ServicesScreen extends ConsumerWidget {
+/// Search/filter parity fix on top of the `heroTag: null` fix — see
+/// `BusinessUnitsScreen`'s doc comment. [businessUnitId]/[businessUnitName]
+/// are unchanged: the FAB still opens a plain `ServiceFormScreen()` with no
+/// `businessUnitId` passed through, matching the pre-existing behavior here
+/// (this file's original didn't wire that through either, unlike
+/// `ProductsScreen`'s FAB — left as-is rather than silently changing
+/// creation behavior; worth a follow-up if that was actually a bug).
+class ServicesScreen extends ConsumerStatefulWidget {
   const ServicesScreen({super.key, this.businessUnitId, this.businessUnitName});
 
   final String? businessUnitId;
   final String? businessUnitName;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ServicesScreen> createState() => _ServicesScreenState();
+}
+
+class _ServicesScreenState extends ConsumerState<ServicesScreen> {
+  final _searchController = TextEditingController();
+  String _query = '';
+  ServiceStatus? _statusFilter;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<ServiceModel> _applyFilters(List<ServiceModel> services) {
+    final query = _query.trim().toLowerCase();
+    return services.where((s) {
+      if (_statusFilter != null && s.status != _statusFilter) return false;
+      if (query.isEmpty) return true;
+      return s.name.toLowerCase().contains(query) ||
+          s.summary.toLowerCase().contains(query) ||
+          s.description.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
-    final servicesAsync = businessUnitId == null
+    final servicesAsync = widget.businessUnitId == null
         ? ref.watch(servicesStreamProvider)
-        : ref.watch(servicesByBusinessUnitProvider(businessUnitId!));
-    final title = businessUnitName != null
-        ? '$businessUnitName · ${strings.servicesTitle}'
+        : ref.watch(servicesByBusinessUnitProvider(widget.businessUnitId!));
+    final title = widget.businessUnitName != null
+        ? '${widget.businessUnitName} · ${strings.servicesTitle}'
         : strings.servicesTitle;
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
       floatingActionButton: FloatingActionButton(
+        heroTag: null,
         onPressed: () => pushSlideFade(context, const ServiceFormScreen()),
         child: const Icon(Icons.add),
       ),
       body: SafeArea(
         child: servicesAsync.when(
           data: (services) {
+            if (services.isEmpty) {
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                      0,
+                    ),
+                    child: PageHeader(
+                      leading: PageBackButton(),
+                      icon: Icons.design_services_outlined,
+                      title: title,
+                      subtitle: strings.servicesSubtitle,
+                      accentColor: AppEntityColors.service,
+                    ),
+                  ),
+                  Expanded(
+                    child: EmptyState(
+                      icon: Icons.design_services_outlined,
+                      title: strings.noServicesYet,
+                      action: FilledButton.icon(
+                        onPressed: () =>
+                            pushSlideFade(context, const ServiceFormScreen()),
+                        icon: const Icon(Icons.add),
+                        label: Text(strings.newServiceTitle),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            final filtered = _applyFilters(services);
+
             return Column(
               children: [
                 Padding(
@@ -53,27 +123,63 @@ class ServicesScreen extends ConsumerWidget {
                     0,
                   ),
                   child: PageHeader(
+                    leading: PageBackButton(),
                     icon: Icons.design_services_outlined,
                     title: title,
                     subtitle: strings.servicesSubtitle,
+                    accentColor: AppEntityColors.service,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                    0,
+                  ),
+                  child: SearchBar(
+                    controller: _searchController,
+                    hintText: strings.searchServicesHint,
+                    leading: const Icon(Icons.search),
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                    0,
+                  ),
+                  child: Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: [
+                      FilterChip(
+                        label: Text(strings.filterAllLabel),
+                        selected: _statusFilter == null,
+                        onSelected: (_) => setState(() => _statusFilter = null),
+                      ),
+                      for (final s in ServiceStatus.values)
+                        FilterChip(
+                          label: Text(s.label),
+                          selected: _statusFilter == s,
+                          onSelected: (selected) => setState(
+                            () => _statusFilter = selected ? s : null,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 Expanded(
-                  child: services.isEmpty
+                  child: filtered.isEmpty
                       ? EmptyState(
-                          icon: Icons.design_services_outlined,
-                          title: strings.noServicesYet,
-                          action: FilledButton.icon(
-                            onPressed: () => pushSlideFade(
-                              context,
-                              const ServiceFormScreen(),
-                            ),
-                            icon: const Icon(Icons.add),
-                            label: Text(strings.newServiceTitle),
-                          ),
+                          icon: Icons.search_off_outlined,
+                          title: strings.noServicesMatchFilter,
+                          compact: true,
                         )
                       : AdaptiveListGrid(
-                          items: services,
+                          items: filtered,
                           itemBuilder: (context, service) => EntityCard(
                             title: service.name,
                             subtitle: service.summary.isNotEmpty
@@ -83,6 +189,7 @@ class ServicesScreen extends ConsumerWidget {
                               label: service.status.label,
                               color: _statusColor(service.status),
                             ),
+                            accentColor: AppEntityColors.service,
                             metaChips: [
                               if (service.businessUnitIds.isNotEmpty)
                                 Chip(

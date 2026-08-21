@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/models/tender_source.dart';
+import 'package:jva_projecttracker/models/user_profile.dart';
 import 'package:jva_projecttracker/services/tender_source_seed_service.dart';
 import 'package:jva_projecttracker/services/tender_sync_service.dart';
 import 'package:jva_projecttracker/screens/opportunities/tender_source_workspace_screen.dart';
@@ -11,6 +12,7 @@ import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/fade_slide_in.dart';
 import 'package:jva_projecttracker/widgets/hover_lift.dart';
+import 'package:jva_projecttracker/widgets/page_back_button.dart';
 import 'package:jva_projecttracker/widgets/page_header.dart';
 import 'package:logger/logger.dart';
 
@@ -25,15 +27,16 @@ Color _statusColor(ColorScheme scheme, TenderSourceStatus status) =>
     };
 
 /// Admin CRUD workspace for [TenderSource]s (Milestone 3.8c). Firestore
-/// rules restrict writes here to admins (`isAdmin()` in firestore.rules) —
-/// this screen doesn't re-check the role client-side, since a denied write
-/// simply surfaces as a normal Firestore permission error, same pattern as
-/// every other admin-only collection in this app.
+/// rules restrict writes here to admins (`isAdmin()` in firestore.rules).
+/// Non-admins get a read-only view — the list is visible, but the Add FAB,
+/// per-source pause/resume/run-now/edit/delete actions, and the "Seed
+/// Production Sources" action are all hidden client-side (`isAdmin` check
+/// in `build`) rather than shown as dead-end controls that only error on
+/// tap.
 ///
-/// The "Seed Production Sources" action (app bar + empty-state button)
-/// calls `seedProductionTenderSources`, which populates the 30 real
-/// government/donor/UN/NGO organizations from the Phase 3 brief — see
-/// functions/seedTenderSources.js. Idempotent, so it's safe to tap more
+/// The seed action calls `seedProductionTenderSources`, which populates the
+/// 30 real government/donor/UN/NGO organizations from the Phase 3 brief —
+/// see functions/seedTenderSources.js. Idempotent, so it's safe to tap more
 /// than once.
 class TenderSourcesScreen extends ConsumerStatefulWidget {
   const TenderSourcesScreen({super.key});
@@ -45,6 +48,43 @@ class TenderSourcesScreen extends ConsumerStatefulWidget {
 
 class _TenderSourcesScreenState extends ConsumerState<TenderSourcesScreen> {
   bool _seeding = false;
+  bool _runningAll = false;
+
+  /// Bulk counterpart to each source's individual "Run now" — with 30+
+  /// sources configured, running each one by hand isn't a workable
+  /// workflow. Calls `runAllTenderSourcesNow` (admin-gated server-side,
+  /// see functions/tenderSourceSync.js), which queues every enabled,
+  /// non-manual source and returns immediately — the syncs themselves
+  /// keep running server-side after this returns (a full batch's real
+  /// Gemini calls take too long for a callable to wait on), so `_runningAll`
+  /// only reflects "queuing in progress", not "all sources finished".
+  /// Progress after that is visible via each source's live status in the
+  /// list below and in Sync History, not from this call.
+  Future<void> _runAllSources() async {
+    final strings = ref.read(appStringsProvider);
+    setState(() => _runningAll = true);
+    try {
+      final queued = await ref
+          .read(tenderSyncServiceProvider)
+          .runAllSourcesNow();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(strings.runAllTenderSourcesQueuedMessage(queued)),
+          ),
+        );
+      }
+    } on TenderSyncException catch (e) {
+      _log.e('Run all tender sources failed', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(strings.errorPrefix(e))));
+      }
+    } finally {
+      if (mounted) setState(() => _runningAll = false);
+    }
+  }
 
   Future<void> _seedProductionSources() async {
     final strings = ref.read(appStringsProvider);
@@ -78,96 +118,129 @@ class _TenderSourcesScreenState extends ConsumerState<TenderSourcesScreen> {
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
     final sources = ref.watch(tenderSourcesStreamProvider);
+    final isAdmin =
+        ref.watch(currentUserProfileProvider).value?.role == UserRole.admin;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(strings.tenderSourcesTitle),
-        actions: [
-          IconButton(
-            onPressed: _seeding ? null : _seedProductionSources,
-            icon: _seeding
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.cloud_download_outlined),
-            tooltip: strings.seedProductionSourcesButton,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.lg,
-              AppSpacing.lg,
-              0,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                0,
+              ),
+              child: PageHeader(
+                leading: PageBackButton(),
+                icon: Icons.travel_explore_outlined,
+                title: strings.tenderSourcesTitle,
+                accentColor: AppStatusColors.info,
+                action: isAdmin
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: _runningAll ? null : _runAllSources,
+                            icon: _runningAll
+                                ? const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.play_circle_outline),
+                            tooltip: strings.runAllTenderSourcesTooltip,
+                          ),
+                          IconButton(
+                            onPressed: _seeding ? null : _seedProductionSources,
+                            icon: _seeding
+                                ? const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.cloud_download_outlined),
+                            tooltip: strings.seedProductionSourcesButton,
+                          ),
+                        ],
+                      )
+                    : null,
+              ),
             ),
-            child: PageHeader(
-              icon: Icons.travel_explore_outlined,
-              title: strings.tenderSourcesTitle,
-            ),
-          ),
-          Expanded(
-            child: sources.when(
-              data: (list) {
-                if (list.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        EmptyState(
-                          icon: Icons.travel_explore_outlined,
-                          title: strings.noTenderSourcesConfiguredMessage,
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        FilledButton.icon(
-                          onPressed: _seeding ? null : _seedProductionSources,
-                          icon: _seeding
-                              ? const SizedBox(
-                                  height: 16,
-                                  width: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.cloud_download_outlined,
-                                  size: 18,
-                                ),
-                          label: Text(strings.seedProductionSourcesButton),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.only(top: AppSpacing.md),
-                  itemCount: list.length,
-                  itemBuilder: (context, i) {
-                    return FadeSlideIn(
-                      index: i,
-                      child: _SourceTile(source: list[i]),
+            Expanded(
+              child: sources.when(
+                data: (list) {
+                  if (list.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          EmptyState(
+                            icon: Icons.travel_explore_outlined,
+                            title: strings.noTenderSourcesConfiguredMessage,
+                          ),
+                          if (isAdmin) ...[
+                            const SizedBox(height: AppSpacing.md),
+                            FilledButton.icon(
+                              onPressed: _seeding
+                                  ? null
+                                  : _seedProductionSources,
+                              icon: _seeding
+                                  ? const SizedBox(
+                                      height: 16,
+                                      width: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.cloud_download_outlined,
+                                      size: 18,
+                                    ),
+                              label: Text(strings.seedProductionSourcesButton),
+                            ),
+                          ],
+                        ],
+                      ),
                     );
-                  },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text(strings.errorPrefix(e))),
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.only(top: AppSpacing.md),
+                    itemCount: list.length,
+                    itemBuilder: (context, i) {
+                      return FadeSlideIn(
+                        index: i,
+                        child: _SourceTile(source: list[i]),
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text(strings.errorPrefix(e))),
+              ),
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => showDialog<void>(
-          context: context,
-          builder: (_) => const _SourceFormDialog(),
+          ],
         ),
-        tooltip: strings.addTenderSourceTitle,
-        child: const Icon(Icons.add),
       ),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton(
+              // heroTag: null avoids a hero-tag collision with other
+              // screens' FABs when two Scaffolds are briefly mounted
+              // together (e.g. HomeShell's tab-switch AnimatedSwitcher).
+              heroTag: null,
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const _SourceFormDialog(),
+              ),
+              tooltip: strings.addTenderSourceTitle,
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 }
@@ -183,6 +256,61 @@ class _SourceTile extends ConsumerStatefulWidget {
 
 class _SourceTileState extends ConsumerState<_SourceTile> {
   bool _running = false;
+
+  Future<void> _confirmDelete() async {
+    final strings = ref.read(appStringsProvider);
+    var alsoDeleteOpportunities = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(strings.deleteSourceButton),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(strings.deleteSourceConfirmMessage),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: alsoDeleteOpportunities,
+                onChanged: (v) =>
+                    setDialogState(() => alsoDeleteOpportunities = v ?? false),
+                title: Text(strings.alsoDeleteSourceOpportunitiesLabel),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(strings.cancelButton),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(strings.deleteSourceButton),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    if (alsoDeleteOpportunities) {
+      final deletedCount = await ref
+          .read(opportunityServiceProvider)
+          .deleteByTenderSourceId(widget.source.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              strings.deletedSourceOpportunitiesMessage(deletedCount),
+            ),
+          ),
+        );
+      }
+    }
+    await ref.read(tenderSourceServiceProvider).delete(widget.source.id);
+  }
 
   Future<void> _runNow() async {
     final strings = ref.read(appStringsProvider);
@@ -214,6 +342,8 @@ class _SourceTileState extends ConsumerState<_SourceTile> {
     final theme = Theme.of(context);
     final source = widget.source;
     final isManual = source.discoveryMethod == TenderDiscoveryMethod.manual;
+    final isAdmin =
+        ref.watch(currentUserProfileProvider).value?.role == UserRole.admin;
 
     return HoverLift(
       child: Card(
@@ -235,51 +365,58 @@ class _SourceTileState extends ConsumerState<_SourceTile> {
             '${strings.tenderSourceCategoryLabel(source.category)} · '
             '${strings.tenderDiscoveryMethodLabel(source.discoveryMethod)}',
           ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(
-                  source.status == TenderSourceStatus.paused
-                      ? Icons.play_circle_outline
-                      : Icons.pause_circle_outline,
-                ),
-                tooltip: source.status == TenderSourceStatus.paused
-                    ? strings.resumeSourceButton
-                    : strings.pauseSourceButton,
-                onPressed: () {
-                  final service = ref.read(tenderSourceServiceProvider);
-                  if (source.status == TenderSourceStatus.paused) {
-                    service.resume(source.id);
-                  } else {
-                    service.pause(source.id);
-                  }
-                },
-              ),
-              _running
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+          trailing: isAdmin
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        source.status == TenderSourceStatus.paused
+                            ? Icons.play_circle_outline
+                            : Icons.pause_circle_outline,
                       ),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.play_arrow),
-                      tooltip: strings.runNowButton,
-                      onPressed: isManual ? null : _runNow,
+                      tooltip: source.status == TenderSourceStatus.paused
+                          ? strings.resumeSourceButton
+                          : strings.pauseSourceButton,
+                      onPressed: () {
+                        final service = ref.read(tenderSourceServiceProvider);
+                        if (source.status == TenderSourceStatus.paused) {
+                          service.resume(source.id);
+                        } else {
+                          service.pause(source.id);
+                        }
+                      },
                     ),
-              IconButton(
-                icon: const Icon(Icons.edit_outlined),
-                tooltip: strings.editTenderSourceTitle,
-                onPressed: () => showDialog<void>(
-                  context: context,
-                  builder: (_) => _SourceFormDialog(existing: source),
-                ),
-              ),
-            ],
-          ),
+                    _running
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.play_arrow),
+                            tooltip: strings.runNowButton,
+                            onPressed: isManual ? null : _runNow,
+                          ),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined),
+                      tooltip: strings.editTenderSourceTitle,
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => _SourceFormDialog(existing: source),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: strings.deleteSourceButton,
+                      onPressed: _confirmDelete,
+                    ),
+                  ],
+                )
+              : null,
         ),
       ),
     );

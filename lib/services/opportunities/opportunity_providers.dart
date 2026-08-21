@@ -12,6 +12,7 @@ import 'package:jva_projecttracker/services/match_analysis_service.dart';
 import 'package:jva_projecttracker/services/opportunity_business_unit_backfill_service.dart';
 import 'package:jva_projecttracker/services/opportunity_event_service.dart';
 import 'package:jva_projecttracker/services/opportunity_service.dart';
+import 'package:jva_projecttracker/services/source_url_verification_service.dart';
 import 'package:jva_projecttracker/services/strategic_review_service.dart';
 
 import '../projects/project_providers.dart';
@@ -26,6 +27,9 @@ final opportunityBusinessUnitBackfillServiceProvider = Provider(
 );
 final businessUnitSeedServiceProvider = Provider(
   (ref) => BusinessUnitSeedService(),
+);
+final sourceUrlVerificationServiceProvider = Provider(
+  (ref) => SourceUrlVerificationService(),
 );
 final aiClassificationServiceProvider = Provider(
   (ref) => AIClassificationService(),

@@ -35,9 +35,13 @@ function extractJson(text) {
  */
 function buildBackfillPrompt({ title, client, description, category, tenderSourceCategory, tags, businessUnitNames }) {
   return `You are classifying a business tender/opportunity against a fixed list of
-a company's Business Units. Choose zero or more Business Units from the
-list below that this opportunity clearly belongs to. You MUST only return
-names that appear verbatim in this list — never invent, rename, or
+a company's Business Units. Choose ALL Business Units from the list below
+that this opportunity belongs to — most opportunities genuinely span more
+than one. For example, a US Embassy compound / ambassador residence / roof
+replacement / diplomatic facility RFQ should get BOTH "Construction" AND
+"Embassy & Diplomatic Facilities" (and "Facility Management" too when
+ongoing building-services or fit-out work is involved). You MUST only
+return names that appear verbatim in this list — never invent, rename, or
 abbreviate a name that isn't listed exactly as written:
 
 ${businessUnitNames.map((n) => `- ${n}`).join("\n")}

@@ -397,6 +397,7 @@ class _ProjectExtractionReviewScreenState
               icon: Icons.fact_check_outlined,
               title: strings.projectExtractionReviewTitle,
               subtitle: null,
+              accentColor: AppStatusColors.operations,
             ),
           ),
           Expanded(
@@ -427,14 +428,23 @@ class _ProjectExtractionReviewScreenState
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        SectionHeader(title: strings.extractionBasicInfoSectionTitle),
+        SectionHeader(
+          title: strings.extractionBasicInfoSectionTitle,
+          accentColor: AppStatusColors.info,
+        ),
         _buildBasicInfoCard(strings, doc, project, dateFormat),
         const SizedBox(height: AppSpacing.xl),
-        SectionHeader(title: strings.extractionRelationshipsSectionTitle),
+        SectionHeader(
+          title: strings.extractionRelationshipsSectionTitle,
+          accentColor: AppStatusColors.info,
+        ),
         ..._buildRelationshipCategories(strings, doc, project),
         ..._buildSuggestedNewEntities(strings, doc),
         const SizedBox(height: AppSpacing.xl),
-        SectionHeader(title: strings.extractionNarrativeSectionTitle),
+        SectionHeader(
+          title: strings.extractionNarrativeSectionTitle,
+          accentColor: AppStatusColors.ai,
+        ),
         _buildNarrativeCard(strings, doc),
         const SizedBox(height: AppSpacing.xl),
         Center(

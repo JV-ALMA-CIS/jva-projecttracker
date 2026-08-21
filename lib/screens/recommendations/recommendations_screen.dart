@@ -110,6 +110,7 @@ class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
               icon: Icons.auto_awesome_outlined,
               title: strings.recommendationsScreenTitle,
               subtitle: null,
+              accentColor: AppStatusColors.ai,
             ),
           ),
           Expanded(

@@ -11,6 +11,12 @@ import 'package:jva_projecttracker/widgets/adaptive_form_row.dart';
 import 'package:jva_projecttracker/widgets/relationship_picker.dart';
 import 'package:jva_projecttracker/widgets/section_header.dart';
 
+/// Standalone Technology create/edit form — the authoritative place to
+/// fully maintain a Technology record (Company Intelligence →
+/// Technologies). A Product form's "+ Add Technology" action uses its own
+/// compact quick-add dialog instead of this screen (see
+/// `ProductFormScreen._addTechnology`), so this form's full field set stays
+/// reserved for deliberate, complete Technology maintenance.
 class TechnologyFormScreen extends ConsumerStatefulWidget {
   const TechnologyFormScreen({super.key, this.technologyId});
 
@@ -190,7 +196,10 @@ class _TechnologyFormScreenState extends ConsumerState<TechnologyFormScreen> {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
-          SectionHeader(title: strings.sectionDetails),
+          SectionHeader(
+            title: strings.sectionDetails,
+            accentColor: AppStatusColors.neutral,
+          ),
           TextFormField(
             controller: _nameController,
             autofocus: !_isEditing,
@@ -223,7 +232,10 @@ class _TechnologyFormScreenState extends ConsumerState<TechnologyFormScreen> {
             maxLines: 4,
           ),
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.sectionClassification),
+          SectionHeader(
+            title: strings.sectionClassification,
+            accentColor: AppStatusColors.neutral,
+          ),
           AdaptiveFieldRow(
             children: [
               TextFormField(
@@ -262,7 +274,10 @@ class _TechnologyFormScreenState extends ConsumerState<TechnologyFormScreen> {
             ],
           ),
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.sectionKeywordsTags),
+          SectionHeader(
+            title: strings.sectionKeywordsTags,
+            accentColor: AppStatusColors.neutral,
+          ),
           AdaptiveFieldRow(
             children: [
               TextFormField(
@@ -280,7 +295,10 @@ class _TechnologyFormScreenState extends ConsumerState<TechnologyFormScreen> {
             ],
           ),
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.sectionRelationships),
+          SectionHeader(
+            title: strings.sectionRelationships,
+            accentColor: AppStatusColors.technology,
+          ),
           RelationshipPicker<BusinessUnit>(
             label: strings.relatedBusinessUnitsLabel,
             optionsAsync: ref.watch(businessUnitsStreamProvider),
@@ -320,7 +338,10 @@ class _TechnologyFormScreenState extends ConsumerState<TechnologyFormScreen> {
             }),
           ),
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.sectionNotes),
+          SectionHeader(
+            title: strings.sectionNotes,
+            accentColor: AppStatusColors.neutral,
+          ),
           TextFormField(
             controller: _notesController,
             decoration: InputDecoration(

@@ -48,6 +48,7 @@ class DiscoveryHistoryScreen extends ConsumerWidget {
             child: PageHeader(
               icon: Icons.history,
               title: strings.discoveryHistoryTitle,
+              accentColor: AppStatusColors.info,
             ),
           ),
           Expanded(

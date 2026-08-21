@@ -182,7 +182,10 @@ class _KnowledgeFormScreenState extends ConsumerState<KnowledgeFormScreen> {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
-          SectionHeader(title: strings.sectionDetails),
+          SectionHeader(
+            title: strings.sectionDetails,
+            accentColor: AppStatusColors.neutral,
+          ),
           TextFormField(
             controller: _titleController,
             autofocus: !_isEditing,
@@ -204,7 +207,10 @@ class _KnowledgeFormScreenState extends ConsumerState<KnowledgeFormScreen> {
             maxLines: 10,
           ),
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.sectionClassification),
+          SectionHeader(
+            title: strings.sectionClassification,
+            accentColor: AppStatusColors.neutral,
+          ),
           TextFormField(
             controller: _categoryController,
             decoration: InputDecoration(labelText: strings.fieldCategory),
@@ -242,7 +248,10 @@ class _KnowledgeFormScreenState extends ConsumerState<KnowledgeFormScreen> {
             decoration: InputDecoration(labelText: strings.fieldArticleTags),
           ),
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.sectionRelationships),
+          SectionHeader(
+            title: strings.sectionRelationships,
+            accentColor: AppEntityColors.knowledgeBase,
+          ),
           RelationshipPicker<BusinessUnit>(
             label: strings.relatedBusinessUnitsLabel,
             optionsAsync: ref.watch(businessUnitsStreamProvider),

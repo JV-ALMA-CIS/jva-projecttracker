@@ -68,6 +68,7 @@ class DiscoverySourcesScreen extends ConsumerWidget {
             child: PageHeader(
               icon: Icons.travel_explore_outlined,
               title: strings.discoverySourcesTitle,
+              accentColor: AppStatusColors.info,
             ),
           ),
           Expanded(
@@ -97,6 +98,10 @@ class DiscoverySourcesScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        // heroTag: null avoids a hero-tag collision with other screens'
+        // FABs when two Scaffolds are briefly mounted together (e.g.
+        // HomeShell's tab-switch AnimatedSwitcher) — see ProjectsScreen.
+        heroTag: null,
         onPressed: () => _showSourceFormDialog(context, ref),
         tooltip: strings.addSourceTitle,
         child: const Icon(Icons.add),
@@ -371,6 +376,10 @@ class _ManualOpportunityDialogState
             title: title,
             description: _descriptionController.text.trim(),
             sourceUrl: sourceUrl,
+            // Human-typed, not an AI-search guess — no fabrication risk to
+            // warn about, so this is verified from the moment it's entered.
+            sourceUrlVerified: true,
+            sourceUrlVerifiedAt: now,
             client: client.isEmpty ? null : client,
             discoveredAt: now,
             updatedAt: now,

@@ -1,5 +1,43 @@
+import 'package:jva_projecttracker/models/company_intelligence/business_unit.dart';
 import 'package:jva_projecttracker/models/opportunity.dart';
 import 'package:jva_projecttracker/models/tender_source.dart';
+
+/// Fixed priority order (by `BusinessUnit.name`, never by id) for the
+/// Opportunities BU chip row: Construction, Facility Management, and
+/// Embassy & Diplomatic Facilities lead — together they cover the largest,
+/// most time-sensitive tender volume (embassy/compound/roof RFQs chief
+/// among them) — Human Resources trails last as the lowest-tender-volume
+/// BU. Anything not listed here keeps its existing relative order, sorted
+/// alphabetically after the pinned leaders and before Human Resources.
+const List<String> _pinnedLeadingBusinessUnitNames = [
+  'Construction',
+  'Facility Management',
+  'Embassy & Diplomatic Facilities',
+];
+const String _pinnedTrailingBusinessUnitName = 'Human Resources';
+
+/// Sorts [businessUnits] for chip display: pinned leaders first (in the
+/// fixed order above), then every other active BU alphabetically by name,
+/// then Human Resources last. A BU whose name doesn't match any pinned
+/// entry is never dropped — it simply sorts into the alphabetical middle.
+List<BusinessUnit> sortBusinessUnitsForChips(List<BusinessUnit> businessUnits) {
+  int rank(BusinessUnit bu) {
+    final leadIndex = _pinnedLeadingBusinessUnitNames.indexOf(bu.name);
+    if (leadIndex != -1) return leadIndex;
+    if (bu.name == _pinnedTrailingBusinessUnitName) {
+      return _pinnedLeadingBusinessUnitNames.length + 1;
+    }
+    return _pinnedLeadingBusinessUnitNames.length;
+  }
+
+  final sorted = [...businessUnits];
+  sorted.sort((a, b) {
+    final rankCompare = rank(a).compareTo(rank(b));
+    if (rankCompare != 0) return rankCompare;
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  });
+  return sorted;
+}
 
 /// Business Unit selector state for the Opportunities Pipeline tab —
 /// separate from an ordinary nullable business-unit id string so "All" and
@@ -10,23 +48,114 @@ enum OpportunityBuSelection { all, unassigned, specific }
 class OpportunityBuFilter {
   const OpportunityBuFilter.all()
     : selection = OpportunityBuSelection.all,
-      businessUnitId = null;
+      businessUnitId = null,
+      businessUnitName = null;
   const OpportunityBuFilter.unassigned()
     : selection = OpportunityBuSelection.unassigned,
-      businessUnitId = null;
-  const OpportunityBuFilter.specific(String id)
+      businessUnitId = null,
+      businessUnitName = null;
+  const OpportunityBuFilter.specific(String id, [this.businessUnitName])
     : selection = OpportunityBuSelection.specific,
       businessUnitId = id;
 
   final OpportunityBuSelection selection;
   final String? businessUnitId;
+
+  /// The selected Business Unit's catalog `name`, e.g. "Construction" —
+  /// used only for soft-inclusion keyword matching (see
+  /// [matchesBuSoftKeywords]) when an opportunity has no `businessUnitIds`
+  /// assigned yet. Not required for `specific`'s hard `contains` match, so
+  /// callers that only have the id (e.g. tests) can omit it.
+  final String? businessUnitName;
+}
+
+/// Keyword aliases that softly imply a Business Unit from an opportunity's
+/// free text even before it's been explicitly multi-tagged — mirrors
+/// `functions/businessUnitMatching.js`'s `ALIASES`, plus terms specific to
+/// soft-inclusion (embassy/diplomatic/roof/pipeline/oil/gas etc. that a
+/// tender's own wording uses, as opposed to an AI classifier's abbreviation
+/// of a BU name). Keyed by the canonical `BusinessUnit.name` these terms
+/// imply; every one of these BUs is treated the same way — no BU gets a
+/// stronger or weaker soft-match rule than another.
+const Map<String, List<String>> businessUnitSoftKeywords = {
+  'Construction': [
+    'construction',
+    'civil works',
+    'building works',
+    'design-build',
+    'design build',
+    'roof',
+    'roofing',
+    'waterproofing',
+    'renovation',
+    'pipeline',
+    'oil and gas',
+    'petroleum',
+  ],
+  'Facility Management': [
+    'facility management',
+    'facilities management',
+    'fm',
+    'building services',
+    'maintenance',
+    'fit-out',
+    'fit out',
+    'cmms',
+  ],
+  'Agribusiness': ['agribusiness', 'agriculture', 'agritech', 'farm'],
+  'Information Technology': [
+    'information technology',
+    'ict',
+    'software',
+    'digital',
+  ],
+  'Human Resources': ['human resources', 'hr management', 'workforce'],
+  // Same strength as every other BU's list — an embassy roof/compound RFQ
+  // must soft-match BOTH this and Construction from the same free text (see
+  // matchesBuFilter's doc comment on multi-tag soft matching).
+  'Embassy & Diplomatic Facilities': [
+    'embassy',
+    'embassies',
+    'diplomatic',
+    'diplomacy',
+    'us embassy',
+    'u.s. embassy',
+    'ambassador',
+    'residence',
+    'compound',
+    'rosslyn',
+    'obo',
+    'rpso',
+  ],
+};
+
+/// True when [opportunity]'s title/description/client/sourceUrl text
+/// contains any soft keyword implying [businessUnitName] — see
+/// [businessUnitSoftKeywords]. `sourceUrl` is included because a tender
+/// source's own domain/slug (e.g. an embassy procurement page URL) often
+/// carries the same signal as the title. An unknown [businessUnitName] (no
+/// entry in the table) never soft-matches, same as an unmatched alias in
+/// the JS matcher: silence, not a guess.
+bool matchesBuSoftKeywords(Opportunity opportunity, String businessUnitName) {
+  final keywords = businessUnitSoftKeywords[businessUnitName];
+  if (keywords == null || keywords.isEmpty) return false;
+  final haystack =
+      '${opportunity.title} ${opportunity.description} '
+              '${opportunity.client ?? ''} ${opportunity.sourceUrl}'
+          .toLowerCase();
+  return keywords.any((k) => haystack.contains(k));
 }
 
 /// True when [opportunity] belongs to the business unit selected by
 /// [filter]. `all` never constrains; `unassigned` matches an empty
 /// `businessUnitIds` list (never invents a BU); `specific` matches the
-/// existing `businessUnitIds.contains` convention already used by
-/// `businessUnitOpportunitiesProvider`.
+/// existing `businessUnitIds.contains` convention first, then — only when
+/// `businessUnitIds` is empty — falls back to [matchesBuSoftKeywords] so an
+/// opportunity that hasn't been multi-tagged yet (e.g. a freshly discovered
+/// embassy roof RFQ) is still visible under a relevant chip instead of only
+/// under "Unassigned". A non-empty `businessUnitIds` that simply doesn't
+/// include this BU is never soft-matched — soft-inclusion only fills the
+/// gap for untagged opportunities, it never overrides an explicit tag set.
 bool matchesBuFilter(Opportunity opportunity, OpportunityBuFilter filter) {
   switch (filter.selection) {
     case OpportunityBuSelection.all:
@@ -34,7 +163,12 @@ bool matchesBuFilter(Opportunity opportunity, OpportunityBuFilter filter) {
     case OpportunityBuSelection.unassigned:
       return opportunity.businessUnitIds.isEmpty;
     case OpportunityBuSelection.specific:
-      return opportunity.businessUnitIds.contains(filter.businessUnitId);
+      if (opportunity.businessUnitIds.contains(filter.businessUnitId)) {
+        return true;
+      }
+      if (opportunity.businessUnitIds.isNotEmpty) return false;
+      if (filter.businessUnitName == null) return false;
+      return matchesBuSoftKeywords(opportunity, filter.businessUnitName!);
   }
 }
 

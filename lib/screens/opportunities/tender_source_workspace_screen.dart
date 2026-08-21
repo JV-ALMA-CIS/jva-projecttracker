@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/models/tender_source.dart';
 import 'package:jva_projecttracker/models/tender_sync_run.dart';
+import 'package:jva_projecttracker/models/user_profile.dart';
 import 'package:jva_projecttracker/services/tender_sync_service.dart';
 import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
@@ -40,6 +41,10 @@ IconData _runStatusIcon(TenderSyncRunStatus status) => switch (status) {
 /// Historical Win Rate, Avg. Opportunities/Month, and — as of 3.8d — real
 /// Import History and a monthly trend, both derived from
 /// [tenderSourceOpportunitiesProvider] rather than a new Firestore query.
+///
+/// The Run now/Pause-Resume/Delete action row is admin-only (same
+/// `isAdmin` gate as `TenderSourcesScreen`) — non-admins get every other
+/// section (profile, scoring, import/sync history) read-only.
 class TenderSourceWorkspaceScreen extends ConsumerWidget {
   const TenderSourceWorkspaceScreen({super.key, required this.sourceId});
 
@@ -133,6 +138,8 @@ class _WorkspaceBodyState extends ConsumerState<_WorkspaceBody> {
     final theme = Theme.of(context);
     final dateFormat = DateFormat.yMMMd(strings.locale.toString()).add_Hm();
     final syncRuns = ref.watch(tenderSyncRunsBySourceProvider(source.id));
+    final isAdmin =
+        ref.watch(currentUserProfileProvider).value?.role == UserRole.admin;
 
     final monthsSinceCreated =
         (DateTime.now().difference(source.createdAt).inDays / 30).clamp(
@@ -229,64 +236,69 @@ class _WorkspaceBodyState extends ConsumerState<_WorkspaceBody> {
         const SizedBox(height: AppSpacing.lg),
 
         // --- Actions ---
-        Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          children: [
-            FilledButton.icon(
-              onPressed:
-                  source.discoveryMethod == TenderDiscoveryMethod.manual ||
-                      _running
-                  ? null
-                  : _runNow,
-              icon: _running
-                  ? const SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.play_arrow, size: 18),
-              label: Text(strings.runNowButton),
-            ),
-            OutlinedButton.icon(
-              onPressed: () {
-                final service = ref.read(tenderSourceServiceProvider);
-                if (source.status == TenderSourceStatus.paused) {
-                  service.resume(source.id);
-                } else {
-                  service.pause(source.id);
-                }
-              },
-              icon: Icon(
-                source.status == TenderSourceStatus.paused
-                    ? Icons.play_circle_outline
-                    : Icons.pause_circle_outline,
-                size: 18,
+        if (isAdmin) ...[
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              FilledButton.icon(
+                onPressed:
+                    source.discoveryMethod == TenderDiscoveryMethod.manual ||
+                        _running
+                    ? null
+                    : _runNow,
+                icon: _running
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.play_arrow, size: 18),
+                label: Text(strings.runNowButton),
               ),
-              label: Text(
-                source.status == TenderSourceStatus.paused
-                    ? strings.resumeSourceButton
-                    : strings.pauseSourceButton,
+              OutlinedButton.icon(
+                onPressed: () {
+                  final service = ref.read(tenderSourceServiceProvider);
+                  if (source.status == TenderSourceStatus.paused) {
+                    service.resume(source.id);
+                  } else {
+                    service.pause(source.id);
+                  }
+                },
+                icon: Icon(
+                  source.status == TenderSourceStatus.paused
+                      ? Icons.play_circle_outline
+                      : Icons.pause_circle_outline,
+                  size: 18,
+                ),
+                label: Text(
+                  source.status == TenderSourceStatus.paused
+                      ? strings.resumeSourceButton
+                      : strings.pauseSourceButton,
+                ),
               ),
-            ),
-            OutlinedButton.icon(
-              onPressed: _confirmDelete,
-              icon: Icon(
-                Icons.delete_outline,
-                size: 18,
-                color: theme.colorScheme.error,
+              OutlinedButton.icon(
+                onPressed: _confirmDelete,
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: theme.colorScheme.error,
+                ),
+                label: Text(
+                  strings.deleteSourceButton,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
               ),
-              label: Text(
-                strings.deleteSourceButton,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.xl),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xl),
+        ],
 
         // --- Scoring ---
-        SectionHeader(title: strings.discoveryHealthLabel),
+        SectionHeader(
+          title: strings.discoveryHealthLabel,
+          accentColor: AppStatusColors.info,
+        ),
         const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
@@ -330,7 +342,10 @@ class _WorkspaceBodyState extends ConsumerState<_WorkspaceBody> {
         const SizedBox(height: AppSpacing.xl),
 
         // --- Import History ---
-        SectionHeader(title: strings.importHistoryLabel),
+        SectionHeader(
+          title: strings.importHistoryLabel,
+          accentColor: AppStatusColors.neutral,
+        ),
         const SizedBox(height: AppSpacing.sm),
         Builder(
           builder: (context) {
@@ -367,7 +382,10 @@ class _WorkspaceBodyState extends ConsumerState<_WorkspaceBody> {
         const SizedBox(height: AppSpacing.xl),
 
         // --- Sync / Error History ---
-        SectionHeader(title: strings.syncHistoryLabel),
+        SectionHeader(
+          title: strings.syncHistoryLabel,
+          accentColor: AppStatusColors.neutral,
+        ),
         const SizedBox(height: AppSpacing.sm),
         syncRuns.when(
           data: (runs) {

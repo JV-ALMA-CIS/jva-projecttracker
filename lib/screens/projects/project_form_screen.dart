@@ -16,6 +16,7 @@ import 'package:jva_projecttracker/services/project_experience_promotion.dart';
 import 'package:jva_projecttracker/services/project_extraction_service.dart';
 import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/theme/app_page_route.dart';
+import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/adaptive_form_row.dart';
 import 'package:jva_projecttracker/widgets/section_header.dart';
 
@@ -426,6 +427,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
       children: [
         SectionHeader(
           title: strings.aiKnowledgeExtractionSectionTitle,
+          accentColor: AppStatusColors.ai,
           trailing: TextButton.icon(
             onPressed: () =>
                 showUploadProjectDocumentDialog(context, projectId: project.id),
@@ -471,7 +473,10 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _buildSourceOpportunityBanner(strings),
-          SectionHeader(title: strings.sectionDetails),
+          SectionHeader(
+            title: strings.sectionDetails,
+            accentColor: AppStatusColors.operations,
+          ),
           TextFormField(
             controller: _nameController,
             autofocus: !_isEditing,
@@ -497,7 +502,10 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
             decoration: InputDecoration(labelText: strings.fieldFundingAgency),
           ),
           const SizedBox(height: 24),
-          SectionHeader(title: strings.sectionClassification),
+          SectionHeader(
+            title: strings.sectionClassification,
+            accentColor: AppStatusColors.operations,
+          ),
           AdaptiveFieldRow(
             children: [
               DropdownButtonFormField<ProjectCategory>(
@@ -580,7 +588,10 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          SectionHeader(title: strings.sectionScopeScale),
+          SectionHeader(
+            title: strings.sectionScopeScale,
+            accentColor: AppStatusColors.operations,
+          ),
           AdaptiveFieldRow(
             children: [
               TextFormField(
@@ -612,7 +623,10 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
             onCurrencyChanged: (c) => setState(() => _currency = c),
           ),
           const SizedBox(height: 24),
-          SectionHeader(title: strings.sectionNotes),
+          SectionHeader(
+            title: strings.sectionNotes,
+            accentColor: AppStatusColors.neutral,
+          ),
           TextFormField(
             controller: _notesController,
             decoration: InputDecoration(labelText: strings.fieldNotes),
@@ -626,7 +640,10 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
               _loadedProject != null &&
               _loadedProject!.status == ProjectStatus.past) ...[
             const SizedBox(height: 24),
-            SectionHeader(title: strings.projectSectionTitle),
+            SectionHeader(
+              title: strings.projectSectionTitle,
+              accentColor: AppStatusColors.success,
+            ),
             _loadedProject!.experienceId == null
                 ? OutlinedButton.icon(
                     onPressed: () => _addAsExperience(_loadedProject!),

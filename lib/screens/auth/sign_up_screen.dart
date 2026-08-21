@@ -2,7 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
+import 'package:jva_projecttracker/services/auth_landing.dart';
 import 'package:jva_projecttracker/services/providers.dart';
+import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:logger/logger.dart';
 
 final _log = Logger();
@@ -20,6 +22,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _submitting = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
   String? _errorMessage;
 
   @override
@@ -43,7 +47,12 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
           .signUp(email, _passwordController.text);
       final uid = ref.read(authServiceProvider).currentUser!.uid;
       await ref.read(userServiceProvider).createOwnProfile(uid, email);
-      if (mounted) Navigator.of(context).pop();
+      // Sign-up doesn't sign the user in on some flows; land back on Sign
+      // In. If Firebase did sign them in, AuthGate's authState listener
+      // takes over and shows HomeShell regardless of landing.
+      if (mounted) {
+        ref.read(authLandingProvider.notifier).landing = AuthLanding.signIn;
+      }
     } on FirebaseAuthException catch (e) {
       _log.w('Sign-up failed', error: e);
       setState(() => _errorMessage = _messageForError(e));
@@ -69,11 +78,20 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      appBar: AppBar(title: Text(strings.createAccountTitle)),
+      appBar: AppBar(
+        title: Text(strings.createAccountTitle),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => ref.read(authLandingProvider.notifier).landing =
+              AuthLanding.welcome,
+        ),
+      ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400),
             child: Form(
@@ -82,50 +100,89 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.work_outline,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.primary,
+                  Center(
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: scheme.primaryContainer,
+                      ),
+                      child: Icon(
+                        Icons.person_add_outlined,
+                        size: 32,
+                        color: scheme.onPrimaryContainer,
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.lg),
                   Text(
                     strings.appTitle,
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Create an account for your team workspace',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
                     decoration: InputDecoration(
                       labelText: strings.fieldEmail,
-                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.mail_outline),
                     ),
                     validator: (v) => (v == null || v.trim().isEmpty)
                         ? strings.emailRequired
                         : null,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   TextFormField(
                     controller: _passwordController,
-                    obscureText: true,
+                    obscureText: _obscurePassword,
                     autofillHints: const [AutofillHints.newPassword],
                     decoration: InputDecoration(
                       labelText: strings.fieldPassword,
-                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
                     ),
                     validator: (v) => (v == null || v.length < 6)
                         ? strings.useAtLeast6Chars
                         : null,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   TextFormField(
                     controller: _confirmPasswordController,
-                    obscureText: true,
+                    obscureText: _obscureConfirm,
                     decoration: InputDecoration(
                       labelText: strings.fieldConfirmPassword,
-                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        onPressed: () =>
+                            setState(() => _obscureConfirm = !_obscureConfirm),
+                        icon: Icon(
+                          _obscureConfirm
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
                     ),
                     onFieldSubmitted: (_) => _submit(),
                     validator: (v) => v != _passwordController.text
@@ -133,15 +190,20 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                         : null,
                   ),
                   if (_errorMessage != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _errorMessage!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                    const SizedBox(height: AppSpacing.md),
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: scheme.errorContainer.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(AppRadii.input),
+                      ),
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(color: scheme.error),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 20),
+                  const SizedBox(height: AppSpacing.xl),
                   FilledButton(
                     onPressed: _submitting ? null : _submit,
                     child: _submitting

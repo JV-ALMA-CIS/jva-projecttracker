@@ -50,6 +50,13 @@ const SEED_BUSINESS_UNITS = [
     slug: "human-resources",
     summary: "Human resources and workforce management services.",
   },
+  {
+    seedKey: "bu-embassy-diplomatic-facilities",
+    name: "Embassy & Diplomatic Facilities",
+    slug: "embassy-diplomatic-facilities",
+    summary:
+      "Embassy compound, ambassador residence, and diplomatic facility construction and fit-out.",
+  },
 ];
 
 /**

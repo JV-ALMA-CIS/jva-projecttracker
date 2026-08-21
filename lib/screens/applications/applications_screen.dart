@@ -5,14 +5,15 @@ import 'package:jva_projecttracker/models/application.dart';
 import 'package:jva_projecttracker/screens/applications/application_form_screen.dart';
 import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/theme/app_page_route.dart';
+import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/adaptive_list_grid.dart';
 import 'package:jva_projecttracker/widgets/entity_card.dart';
 import 'package:jva_projecttracker/widgets/status_badge.dart';
 
 Color _statusColor(ApplicationStatus status) => switch (status) {
-  ApplicationStatus.active => Colors.green,
-  ApplicationStatus.maintenance => Colors.orange,
-  ApplicationStatus.deprecated => Colors.grey,
+  ApplicationStatus.active => AppStatusColors.success,
+  ApplicationStatus.maintenance => AppStatusColors.warning,
+  ApplicationStatus.deprecated => AppStatusColors.neutral,
 };
 
 class ApplicationsScreen extends ConsumerWidget {
@@ -26,6 +27,10 @@ class ApplicationsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text(strings.applicationsTitle)),
       floatingActionButton: FloatingActionButton(
+        // heroTag: null avoids a hero-tag collision with other screens'
+        // FABs when two Scaffolds are briefly mounted together (e.g.
+        // HomeShell's tab-switch AnimatedSwitcher).
+        heroTag: null,
         onPressed: () => pushSlideFade(context, const ApplicationFormScreen()),
         child: const Icon(Icons.add),
       ),

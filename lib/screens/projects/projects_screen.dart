@@ -81,6 +81,13 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 
     return Scaffold(
       floatingActionButton: FloatingActionButton(
+        // No cross-screen hero transition is needed for this FAB — an
+        // explicit null tag avoids the implicit shared default tag every
+        // other screen's un-tagged FAB would otherwise use, which collides
+        // ("multiple heroes share the same tag") whenever two Scaffolds are
+        // briefly mounted together, as HomeShell's AnimatedSwitcher does on
+        // every tab switch.
+        heroTag: null,
         onPressed: () => _showAddOptions(context, strings),
         tooltip: strings.addButton,
         child: const Icon(Icons.add),
@@ -98,6 +105,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
               icon: Icons.inventory_2_outlined,
               title: strings.projectsTitle,
               subtitle: strings.projectsSubtitle,
+              accentColor: AppStatusColors.operations,
             ),
           ),
           Padding(

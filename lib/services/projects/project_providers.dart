@@ -98,44 +98,54 @@ final projectByIdProvider = StreamProvider.autoDispose.family<Project?, String>(
 /// [projectMilestonesByProjectIdProvider]/[projectDeliverablesByProjectIdProvider]/
 /// [projectRisksByProjectIdProvider], already streamed for the workspace
 /// itself; no separate reads. See `project_health.dart`.
-final projectHealthProvider = Provider.family<ProjectHealth, String>((
-  ref,
-  projectId,
-) {
-  final project = ref.watch(projectByIdProvider(projectId)).value;
-  final milestones =
-      ref.watch(projectMilestonesByProjectIdProvider(projectId)).value ??
-      const [];
-  final deliverables =
-      ref.watch(projectDeliverablesByProjectIdProvider(projectId)).value ??
-      const [];
-  final risks =
-      ref.watch(projectRisksByProjectIdProvider(projectId)).value ?? const [];
+///
+/// `autoDispose` because this depends on [projectByIdProvider], which is
+/// itself `autoDispose`. Keeping this as a plain (non-autoDispose) `Provider`
+/// let it outlive its dependency's disposal window: when the last watcher
+/// briefly dropped away mid-rebuild (e.g. Dashboard's attention list and
+/// `ProjectWorkspaceScreen` both watching the same `projectId` across
+/// frames), Riverpod would dispose and recreate `projectByIdProvider`
+/// synchronously inside another widget's build phase, tripping
+/// "setState()/markNeedsBuild() called during build" in
+/// `ProjectWorkspaceScreen._buildBody`. Matching the autoDispose lifecycle
+/// here keeps both providers disposed/recreated together.
+final projectHealthProvider = Provider.autoDispose
+    .family<ProjectHealth, String>((ref, projectId) {
+      final project = ref.watch(projectByIdProvider(projectId)).value;
+      final milestones =
+          ref.watch(projectMilestonesByProjectIdProvider(projectId)).value ??
+          const [];
+      final deliverables =
+          ref.watch(projectDeliverablesByProjectIdProvider(projectId)).value ??
+          const [];
+      final risks =
+          ref.watch(projectRisksByProjectIdProvider(projectId)).value ??
+          const [];
 
-  if (project == null) {
-    return const ProjectHealth(
-      overall: ProjectHealthLevel.healthy,
-      scheduleHealth: ProjectHealthLevel.healthy,
-      budgetHealth: ProjectHealthLevel.healthy,
-      riskHealth: ProjectHealthLevel.healthy,
-      completionPercent: 0,
-      delayedMilestonesCount: 0,
-      overdueDeliverablesCount: 0,
-      blockedDeliverablesCount: 0,
-      openCriticalRisksCount: 0,
-      openHighRisksCount: 0,
-      budgetUtilization: null,
-      reasons: [],
-    );
-  }
+      if (project == null) {
+        return const ProjectHealth(
+          overall: ProjectHealthLevel.healthy,
+          scheduleHealth: ProjectHealthLevel.healthy,
+          budgetHealth: ProjectHealthLevel.healthy,
+          riskHealth: ProjectHealthLevel.healthy,
+          completionPercent: 0,
+          delayedMilestonesCount: 0,
+          overdueDeliverablesCount: 0,
+          blockedDeliverablesCount: 0,
+          openCriticalRisksCount: 0,
+          openHighRisksCount: 0,
+          budgetUtilization: null,
+          reasons: [],
+        );
+      }
 
-  return computeProjectHealth(
-    project: project,
-    milestones: milestones,
-    deliverables: deliverables,
-    risks: risks,
-  );
-});
+      return computeProjectHealth(
+        project: project,
+        milestones: milestones,
+        deliverables: deliverables,
+        risks: risks,
+      );
+    });
 
 /// Related/similar previous projects for the Related Knowledge panel. See
 /// `project_related_knowledge.dart`.

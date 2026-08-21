@@ -45,6 +45,153 @@ class TenderSourceConnector {
 }
 
 /**
+ * True when [url] is one of Gemini's Google Search grounding-tool citation
+ * links (`https://vertexaisearch.cloud.google.com/grounding-api-redirect/...`)
+ * rather than a real, independently resolvable source page — mirrors
+ * `isGroundingRedirectStub` in lib/utils/external_url.dart, which the
+ * Flutter client uses to block the exact same shape before ever launching a
+ * URL. These are session-scoped citation redirects the model returns as its
+ * "source" when `_syncAiSearch` (apiConnector.js) uses Google Search
+ * grounding; they frequently error out for a user opening them fresh later.
+ * Checked here too (not only client-side) so a bad AI-search sourceUrl is
+ * never written to Firestore in the first place — every existing/future
+ * viewer of the opportunity is protected, not just whoever has this build
+ * of the client.
+ */
+function isGroundingRedirectStub(url) {
+  if (typeof url !== "string") return false;
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return (
+    parsed.host.includes("vertexaisearch.cloud.google.com") &&
+    parsed.pathname.includes("grounding-api-redirect")
+  );
+}
+
+/**
+ * Phrases that show up on "soft 404" pages — a server answering with a real
+ * 2xx status for content that is actually a not-found/error page, common on
+ * WordPress-hosted government/embassy sites and CDN-fronted domains that
+ * redirect dead links to a friendly page rather than a bare 404 status.
+ * Matched case-insensitively against the first slice of the response body.
+ * Deliberately conservative (each phrase names the page itself, not just
+ * the digits "404", to avoid false-flagging a real tender page that happens
+ * to mention "404" in an address or reference number).
+ */
+const SOFT_404_PATTERNS = [
+  /page (you (are|were) looking for|you requested) (could not be found|was not found|cannot be found|doesn't exist|does not exist)/i,
+  /(sorry,? )?(this|that) page (could not be found|was not found|doesn't exist|does not exist|is no longer available)/i,
+  /we (can(no|')t|couldn't|could not) find (the|that|this) page/i,
+  /error 404[\s\-:]*(page )?not found/i,
+  /404[\s\-:]*(page )?not found/i,
+  /the requested (page|url) (was not found|could not be found|does not exist) on this server/i,
+];
+
+/**
+ * Phrases that show up on "soft block" pages — a WAF/bot-protection layer
+ * (common on government/embassy sites fronted by a CDN) answering a real
+ * 2xx status for a page that actually denies the request, rather than a
+ * genuine 403/503. Caught the same real case that motivated adding this:
+ * `ke.usembassy.gov`'s WAF returning "We're sorry, this site is currently
+ * experiencing technical difficulties... Exception: forbidden" with status
+ * 200 for an automated fetch of an otherwise-real, human-verified-dead PDF
+ * link — status-code-only checking couldn't catch it, and neither could
+ * SOFT_404_PATTERNS, since none of those phrases are 404-shaped.
+ */
+const SOFT_BLOCK_PATTERNS = [
+  /experiencing technical difficulties/i,
+  /exception:\s*forbidden/i,
+  /access (to this (page|resource) )?(is |has been )?denied/i,
+  /you (don't|do not) have permission to access/i,
+  /request (was )?blocked/i,
+];
+
+/** First N chars of the body are enough to catch these — avoids reading/scanning a large page in full. */
+const SOFT_404_SCAN_CHARS = 20000;
+
+function looksLikeSoft404(bodyText) {
+  if (!bodyText) return false;
+  const snippet = bodyText.slice(0, SOFT_404_SCAN_CHARS);
+  return (
+    SOFT_404_PATTERNS.some((pattern) => pattern.test(snippet)) ||
+    SOFT_BLOCK_PATTERNS.some((pattern) => pattern.test(snippet))
+  );
+}
+
+/**
+ * Checks whether [url] actually resolves with a real HTTP request — run
+ * from a Cloud Function (a real server environment, not a CORS-restricted
+ * browser), so this can do what the client-side equivalent tried and
+ * failed to do reliably. Tries HEAD first (cheap): a 4xx/5xx there is a
+ * fast, confident "unreachable" with no need for a follow-up request. But
+ * a HEAD response has no body to inspect, and some real domains answer a
+ * dead link with a 2xx "soft 404" page rather than a real 404 status — so
+ * any status-only "reachable" verdict (HEAD 2xx/3xx, or HEAD rejected/
+ * erroring and falling back) is confirmed with one GET and a scan of its
+ * body for common not-found phrasing before being trusted. Bounded by a
+ * short timeout per request so one slow/hanging site can't stall an
+ * entire sync run across many candidates.
+ *
+ * This exists specifically to catch AI-search discovery
+ * (`ApiConnector._syncAiSearch`) fabricating a plausible-looking but
+ * nonexistent tender URL — a failure mode a stricter prompt alone cannot
+ * fully prevent. A `false` result does not delete the opportunity; see
+ * [createOpportunitiesFromCandidates]'s `sourceUrlVerified` field, which
+ * lets the client warn the user instead of presenting a fabricated link as
+ * equally trustworthy as a real one.
+ */
+async function checkUrlReachable(url, { timeoutMs = 5000 } = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const headRes = await fetch(url, {
+      method: "HEAD",
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    if (headRes.status >= 400 && headRes.status !== 405) return false;
+  } catch {
+    // Fall through to a GET attempt — some servers reject HEAD outright
+    // (connection reset) rather than answering with 405.
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  // Either HEAD said "reachable" or it was inconclusive (405/error) — in
+  // both cases a GET is needed next: to confirm reachability in the
+  // inconclusive case, and to fetch a body to scan in the reachable case
+  // (HEAD alone can never rule out a soft 404).
+  const getController = new AbortController();
+  const getTimeout = setTimeout(() => getController.abort(), timeoutMs);
+  try {
+    const getRes = await fetch(url, {
+      method: "GET",
+      signal: getController.signal,
+      redirect: "follow",
+    });
+    if (getRes.status >= 400) return false;
+    let bodyText;
+    try {
+      bodyText = await getRes.text();
+    } catch {
+      // Body unreadable (e.g. binary content, stream error) — fall back to
+      // trusting the status code alone rather than treating an unreadable
+      // body as a failure.
+      return true;
+    }
+    return !looksLikeSoft404(bodyText);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(getTimeout);
+  }
+}
+
+/**
  * Shared candidate -> Opportunity write path used by every connector.
  * Centralizing this means dedup semantics (sourceUrl equality against the
  * `opportunities` collection — same rule Milestone 3.7 used) and the
@@ -53,14 +200,37 @@ class TenderSourceConnector {
  *
  * Each candidate must have at least {title, sourceUrl}; other fields are
  * optional and defaulted. `deadline`, if present, must be an ISO 8601
- * string or omitted/null.
+ * string or omitted/null. A candidate whose sourceUrl is a Gemini
+ * grounding-redirect stub (see [isGroundingRedirectStub]) is silently
+ * dropped rather than written — same as a missing title/sourceUrl — since a
+ * dead link is worse than no opportunity at all for that candidate.
+ *
+ * Every surviving candidate's `sourceUrl` is checked with a real HTTP
+ * request (see [checkUrlReachable]) before writing, and the result is
+ * stored as `sourceUrlVerified` — the opportunity is still created either
+ * way (a reachability check has false negatives, e.g. a real site that
+ * blocks automated requests, so a failed check must never silently discard
+ * an otherwise-good opportunity the way the grounding-stub check does).
+ * The client uses `sourceUrlVerified` to show a warning + manual
+ * "mark as verified" override rather than presenting every link as equally
+ * trustworthy.
+ *
+ * `reachabilityCheck` defaults to the real [checkUrlReachable] — overridable
+ * purely so tests can stub it out instead of making real network calls; no
+ * production caller ever needs to pass this.
  */
-async function createOpportunitiesFromCandidates(db, source, candidates) {
+async function createOpportunitiesFromCandidates(
+  db,
+  source,
+  candidates,
+  { reachabilityCheck = checkUrlReachable } = {},
+) {
   let created = 0;
   let duplicatesSkipped = 0;
 
   for (const c of candidates) {
     if (!c || !c.sourceUrl || !c.title) continue;
+    if (isGroundingRedirectStub(c.sourceUrl)) continue;
 
     const existing = await db
       .collection("opportunities")
@@ -81,10 +251,14 @@ async function createOpportunitiesFromCandidates(db, source, candidates) {
       }
     }
 
+    const sourceUrlVerified = await reachabilityCheck(c.sourceUrl);
+
     await db.collection("opportunities").add({
       title: c.title,
       description: c.description || "",
       sourceUrl: c.sourceUrl,
+      sourceUrlVerified,
+      sourceUrlVerifiedAt: sourceUrlVerified ? now : null,
       client: c.client || null,
       deadline,
       status: "discovered",
@@ -111,4 +285,9 @@ async function createOpportunitiesFromCandidates(db, source, candidates) {
   return { candidatesFound: candidates.length, created, duplicatesSkipped };
 }
 
-module.exports = { TenderSourceConnector, createOpportunitiesFromCandidates };
+module.exports = {
+  TenderSourceConnector,
+  createOpportunitiesFromCandidates,
+  isGroundingRedirectStub,
+  checkUrlReachable,
+};

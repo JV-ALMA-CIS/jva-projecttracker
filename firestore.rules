@@ -29,8 +29,15 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // Read/create/update stays open to any authenticated staff account —
+    // opportunity triage/pipeline work is everyday, non-admin activity.
+    // Delete is admin-only: the app's bulk cleanup action (dedupe/retire
+    // stale opportunities) is presented to admins only in the UI, and this
+    // mirrors that at the rules layer rather than relying on the client to
+    // enforce it.
     match /opportunities/{opportunityId} {
-      allow read, write: if isAuthenticated();
+      allow read, create, update: if isAuthenticated();
+      allow delete: if isAdmin();
     }
 
     match /businessUnits/{businessUnitId} {
@@ -62,6 +69,17 @@ service cloud.firestore {
     }
 
     match /knowledgeBase/{articleId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /certifications/{certificationId} {
+      allow read, write: if isAuthenticated();
+    }
+    // Company-level eligibility credentials (NCA grade, tax compliance,
+    // AGPO, ISO, business permits, professional licenses, …) — same
+    // internal-tool posture as every other Company Intelligence collection
+    // above. Org eligibility, not project delivery data.
+    match /certifications/{certificationId} {
       allow read, write: if isAuthenticated();
     }
 

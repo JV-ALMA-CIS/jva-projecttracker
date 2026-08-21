@@ -1,5 +1,45 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:jva_projecttracker/models/company_intelligence/certification.dart';
 import 'package:jva_projecttracker/models/tender_source.dart';
+
+/// One tender-stated eligibility requirement — entered by hand on the
+/// Opportunity Workspace (Phase 1 of company certifications). Deliberately
+/// manual rather than AI-parsed from tender documents: full-document OCR
+/// for mandatory certification lists is a real future feature, not
+/// something this app should guess at from thin classification text today
+/// (see the Certifications brief's explicit "do not block on AI" rule).
+/// [gradeOrClass] is optional — a requirement can be "must hold an active
+/// ISO certification" with no specific grade, or "NCA class 7 or higher."
+class OpportunityCertificationRequirement {
+  const OpportunityCertificationRequirement({
+    required this.type,
+    this.gradeOrClass,
+    required this.label,
+  });
+
+  final CertificationType type;
+  final String? gradeOrClass;
+
+  /// Human-readable summary shown on the Eligibility section and in gap
+  /// messages, e.g. "NCA Class 7" — kept as a plain string (rather than
+  /// always derived from [type]/[gradeOrClass]) so a tender's exact wording
+  /// can be preserved verbatim.
+  final String label;
+
+  factory OpportunityCertificationRequirement.fromMap(
+    Map<String, dynamic> map,
+  ) {
+    return OpportunityCertificationRequirement(
+      type: CertificationTypeX.fromString(map['type'] as String? ?? 'other'),
+      gradeOrClass: map['gradeOrClass'] as String?,
+      label: map['label'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {'type': type.name, 'gradeOrClass': gradeOrClass, 'label': label};
+  }
+}
 
 enum OpportunityStatus {
   discovered,
@@ -234,6 +274,34 @@ class Opportunity {
   final String title;
   final String description;
   final String sourceUrl;
+
+  /// True once `sourceUrl` has been confirmed to actually load — either by
+  /// the discovery-time HTTP check `createOpportunitiesFromCandidates`
+  /// performs for every connector (functions/connectors/
+  /// tenderSourceConnector.js) before writing, or by a human clicking "Mark
+  /// as verified" on the Opportunity Workspace after checking it
+  /// themselves. Exists because AI-search discovery
+  /// (`ApiConnector._syncAiSearch`) can fabricate a plausible-looking but
+  /// nonexistent tender URL — this flag is what lets the UI warn "this
+  /// link hasn't been confirmed" instead of silently presenting a
+  /// fabricated URL as equally trustworthy as a real one.
+  ///
+  /// Defaults to `false` — including for every opportunity written before
+  /// this field existed. That's deliberate, not an oversight: a legacy
+  /// document was never actually checked, so treating its absence as
+  /// "verified" would hide exactly the fabricated-link problem this field
+  /// exists to surface (an old AI-search opportunity with a dead link
+  /// should show the same warning as a newly discovered one, not be
+  /// silently exempted because it predates the check).
+  final bool sourceUrlVerified;
+
+  /// When [sourceUrlVerified] last became true — null if never verified
+  /// (or predates this field, where [sourceUrlVerified] itself defaults to
+  /// true without a timestamp). Purely informational (e.g. "verified 3
+  /// months ago" could still be stale if the tender was later taken down),
+  /// never used to gate anything.
+  final DateTime? sourceUrlVerifiedAt;
+
   final String? client;
   final DateTime? deadline;
   final OpportunityStatus status;
@@ -370,11 +438,22 @@ class Opportunity {
   final String? humanDecisionBy;
   final DateTime? humanDecisionAt;
 
+  // --- Certification eligibility requirements (Company Certifications) ---
+  // Manually entered on the Opportunity Workspace's Eligibility section —
+  // never auto-filled from `aiExtractedCertifications` or any other AI
+  // extraction output (see `OpportunityCertificationRequirement`'s doc
+  // comment). Checked against `certificationsStreamProvider` via
+  // `computeEligibilityGaps` (`certification_eligibility.dart`) to render
+  // gap chips; nothing here gates Proposal/Submission/Start Project.
+  final List<OpportunityCertificationRequirement> requiredCertifications;
+
   const Opportunity({
     required this.id,
     required this.title,
     required this.description,
     required this.sourceUrl,
+    this.sourceUrlVerified = false,
+    this.sourceUrlVerifiedAt,
     this.client,
     this.deadline,
     this.status = OpportunityStatus.discovered,
@@ -455,6 +534,7 @@ class Opportunity {
     this.humanDecisionReason,
     this.humanDecisionBy,
     this.humanDecisionAt,
+    this.requiredCertifications = const [],
   });
 
   factory Opportunity.fromMap(String id, Map<String, dynamic> map) {
@@ -463,6 +543,8 @@ class Opportunity {
       title: map['title'] as String? ?? '',
       description: map['description'] as String? ?? '',
       sourceUrl: map['sourceUrl'] as String? ?? '',
+      sourceUrlVerified: map['sourceUrlVerified'] as bool? ?? false,
+      sourceUrlVerifiedAt: (map['sourceUrlVerifiedAt'] as Timestamp?)?.toDate(),
       client: map['client'] as String?,
       deadline: (map['deadline'] as Timestamp?)?.toDate(),
       status: OpportunityStatusX.fromString(
@@ -627,6 +709,14 @@ class Opportunity {
       humanDecisionReason: map['humanDecisionReason'] as String?,
       humanDecisionBy: map['humanDecisionBy'] as String?,
       humanDecisionAt: (map['humanDecisionAt'] as Timestamp?)?.toDate(),
+      requiredCertifications:
+          (map['requiredCertifications'] as List<dynamic>? ?? const [])
+              .map(
+                (e) => OpportunityCertificationRequirement.fromMap(
+                  Map<String, dynamic>.from(e as Map),
+                ),
+              )
+              .toList(),
     );
   }
 
@@ -635,6 +725,10 @@ class Opportunity {
       'title': title,
       'description': description,
       'sourceUrl': sourceUrl,
+      'sourceUrlVerified': sourceUrlVerified,
+      'sourceUrlVerifiedAt': sourceUrlVerifiedAt != null
+          ? Timestamp.fromDate(sourceUrlVerifiedAt!)
+          : null,
       'client': client,
       'deadline': deadline != null ? Timestamp.fromDate(deadline!) : null,
       'status': status.name,
@@ -729,6 +823,9 @@ class Opportunity {
       'humanDecisionAt': humanDecisionAt != null
           ? Timestamp.fromDate(humanDecisionAt!)
           : null,
+      'requiredCertifications': requiredCertifications
+          .map((r) => r.toMap())
+          .toList(),
     };
   }
 }

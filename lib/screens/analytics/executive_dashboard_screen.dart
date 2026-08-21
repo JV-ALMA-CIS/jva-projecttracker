@@ -142,7 +142,10 @@ class _ExecutiveDashboardScreenState
                 const SizedBox(height: AppSpacing.xl),
 
                 // --- KPI row ---
-                SectionHeader(title: strings.pipelineSnapshotSectionTitle),
+                SectionHeader(
+                  title: strings.pipelineSnapshotSectionTitle,
+                  accentColor: _SectionColors.active,
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 Wrap(
                   spacing: AppSpacing.md,
@@ -281,7 +284,7 @@ class _ExecutiveDashboardScreenState
                         DistributionEntry(
                           label: strings.unassignedLabel,
                           count: metrics.unassignedActiveCount,
-                          color: Colors.grey,
+                          color: AppStatusColors.neutral,
                         ),
                     ],
                   ),

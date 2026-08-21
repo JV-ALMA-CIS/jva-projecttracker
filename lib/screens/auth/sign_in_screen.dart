@@ -2,13 +2,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
-import 'package:jva_projecttracker/screens/auth/sign_up_screen.dart';
+import 'package:jva_projecttracker/services/auth_landing.dart';
 import 'package:jva_projecttracker/services/providers.dart';
-import 'package:jva_projecttracker/theme/app_page_route.dart';
+import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:logger/logger.dart';
 
 final _log = Logger();
 
+/// Credentials only. Branding lives on [WelcomeScreen].
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
 
@@ -21,6 +22,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _submitting = false;
+  bool _obscurePassword = true;
   String? _errorMessage;
 
   @override
@@ -40,6 +42,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       await ref
           .read(authServiceProvider)
           .signIn(_emailController.text, _passwordController.text);
+      // AuthGate watches authStateChangesProvider and swaps straight to
+      // HomeShell once Firebase reports the signed-in user — no navigation
+      // needed here.
     } on FirebaseAuthException catch (e) {
       _log.w('Sign-in failed', error: e);
       setState(() => _errorMessage = _messageForError(e));
@@ -87,10 +92,20 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
+      appBar: AppBar(
+        title: Text(strings.signInButton),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => ref.read(authLandingProvider.notifier).landing =
+              AuthLanding.welcome,
+        ),
+      ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400),
             child: Form(
@@ -99,54 +114,75 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.work_outline,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 12),
                   Text(
                     strings.appTitle,
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Sign in to continue to your workspace',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
+                    textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
                       labelText: strings.fieldEmail,
-                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.mail_outline),
                     ),
                     validator: (v) => (v == null || v.trim().isEmpty)
                         ? strings.emailRequired
                         : null,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   TextFormField(
                     controller: _passwordController,
-                    obscureText: true,
+                    obscureText: _obscurePassword,
                     autofillHints: const [AutofillHints.password],
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) => _submit(),
                     decoration: InputDecoration(
                       labelText: strings.fieldPassword,
-                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
                     ),
-                    onFieldSubmitted: (_) => _submit(),
                     validator: (v) => (v == null || v.isEmpty)
                         ? strings.passwordRequired
                         : null,
                   ),
                   if (_errorMessage != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _errorMessage!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                    const SizedBox(height: AppSpacing.md),
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: scheme.errorContainer.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(AppRadii.input),
+                      ),
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(color: scheme.error),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 20),
+                  const SizedBox(height: AppSpacing.xl),
                   FilledButton(
                     onPressed: _submitting ? null : _submit,
                     child: _submitting
@@ -157,7 +193,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                           )
                         : Text(strings.signInButton),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpacing.sm),
                   TextButton(
                     onPressed: _submitting ? null : _resetPassword,
                     child: Text(strings.forgotPassword),
@@ -165,7 +201,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   TextButton(
                     onPressed: _submitting
                         ? null
-                        : () => pushSlideFade(context, const SignUpScreen()),
+                        : () => ref.read(authLandingProvider.notifier).landing =
+                              AuthLanding.signUp,
                     child: Text(strings.createAccountButton),
                   ),
                 ],

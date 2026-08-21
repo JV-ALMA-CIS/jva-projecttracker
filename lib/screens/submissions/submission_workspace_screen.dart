@@ -315,6 +315,7 @@ class _SubmissionWorkspaceScreenState
               icon: Icons.rocket_launch_outlined,
               title: strings.submissionWorkspaceTitle,
               subtitle: null,
+              accentColor: AppStatusColors.info,
             ),
           ),
           Expanded(

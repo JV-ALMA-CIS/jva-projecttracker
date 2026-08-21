@@ -10,12 +10,13 @@ import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/adaptive_list_grid.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/entity_card.dart';
+import 'package:jva_projecttracker/widgets/page_back_button.dart';
 import 'package:jva_projecttracker/widgets/page_header.dart';
 import 'package:jva_projecttracker/widgets/status_badge.dart';
 
 Color _statusColor(IndustryStatus status) => switch (status) {
   IndustryStatus.active => AppStatusColors.success,
-  IndustryStatus.archived => Colors.grey,
+  IndustryStatus.archived => AppStatusColors.neutral,
 };
 
 class IndustriesScreen extends ConsumerStatefulWidget {
@@ -55,8 +56,11 @@ class _IndustriesScreenState extends ConsumerState<IndustriesScreen> {
     final industriesAsync = ref.watch(industriesStreamProvider);
 
     return Scaffold(
-      appBar: AppBar(),
       floatingActionButton: FloatingActionButton(
+        // heroTag: null avoids a hero-tag collision with other screens'
+        // FABs when two Scaffolds are briefly mounted together (e.g.
+        // HomeShell's tab-switch AnimatedSwitcher).
+        heroTag: null,
         onPressed: () => pushSlideFade(context, const IndustryFormScreen()),
         child: const Icon(Icons.add),
       ),
@@ -74,9 +78,11 @@ class _IndustriesScreenState extends ConsumerState<IndustriesScreen> {
                       0,
                     ),
                     child: PageHeader(
+                      leading: PageBackButton(),
                       icon: Icons.factory_outlined,
                       title: strings.industriesTitle,
                       subtitle: strings.industriesSubtitle,
+                      accentColor: AppEntityColors.industry,
                     ),
                   ),
                   Expanded(
@@ -111,9 +117,11 @@ class _IndustriesScreenState extends ConsumerState<IndustriesScreen> {
                     0,
                   ),
                   child: PageHeader(
+                    leading: PageBackButton(),
                     icon: Icons.factory_outlined,
                     title: strings.industriesTitle,
                     subtitle: strings.industriesSubtitle,
+                    accentColor: AppEntityColors.industry,
                   ),
                 ),
                 Padding(
@@ -181,6 +189,7 @@ class _IndustriesScreenState extends ConsumerState<IndustriesScreen> {
                               label: i.status.label,
                               color: _statusColor(i.status),
                             ),
+                            accentColor: AppEntityColors.industry,
                             metaChips: [
                               if (i.sector != null && i.sector!.isNotEmpty)
                                 Chip(

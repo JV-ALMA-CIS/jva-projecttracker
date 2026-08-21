@@ -252,7 +252,10 @@ class _ExperienceFormScreenState extends ConsumerState<ExperienceFormScreen> {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
-          SectionHeader(title: strings.sectionDetails),
+          SectionHeader(
+            title: strings.sectionDetails,
+            accentColor: AppStatusColors.neutral,
+          ),
           TextFormField(
             controller: _titleController,
             autofocus: !_isEditing,
@@ -272,7 +275,10 @@ class _ExperienceFormScreenState extends ConsumerState<ExperienceFormScreen> {
             maxLines: 3,
           ),
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.sectionClientLocation),
+          SectionHeader(
+            title: strings.sectionClientLocation,
+            accentColor: AppStatusColors.neutral,
+          ),
           AdaptiveFieldRow(
             children: [
               TextFormField(
@@ -299,7 +305,10 @@ class _ExperienceFormScreenState extends ConsumerState<ExperienceFormScreen> {
             ],
           ),
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.sectionEngagementDetails),
+          SectionHeader(
+            title: strings.sectionEngagementDetails,
+            accentColor: AppStatusColors.neutral,
+          ),
           AdaptiveFieldRow(
             children: [
               InkWell(
@@ -376,7 +385,10 @@ class _ExperienceFormScreenState extends ConsumerState<ExperienceFormScreen> {
             ],
           ),
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.sectionOutcomes),
+          SectionHeader(
+            title: strings.sectionOutcomes,
+            accentColor: AppStatusColors.neutral,
+          ),
           TextFormField(
             controller: _outcomeController,
             decoration: InputDecoration(labelText: strings.fieldOutcome),
@@ -400,7 +412,10 @@ class _ExperienceFormScreenState extends ConsumerState<ExperienceFormScreen> {
             decoration: InputDecoration(labelText: strings.fieldExperienceTags),
           ),
           const SizedBox(height: AppSpacing.xl),
-          SectionHeader(title: strings.sectionRelationships),
+          SectionHeader(
+            title: strings.sectionRelationships,
+            accentColor: AppStatusColors.technology,
+          ),
           RelationshipPicker<BusinessUnit>(
             label: strings.relatedBusinessUnitsLabel,
             optionsAsync: ref.watch(businessUnitsStreamProvider),

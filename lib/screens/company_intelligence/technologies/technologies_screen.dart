@@ -10,12 +10,19 @@ import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/adaptive_list_grid.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/entity_card.dart';
+import 'package:jva_projecttracker/widgets/page_back_button.dart';
 import 'package:jva_projecttracker/widgets/page_header.dart';
 import 'package:jva_projecttracker/widgets/status_badge.dart';
 
+// Was `TechnologyStatus.active => AppStatusColors.technology` — every
+// other entity type's `_statusColor` maps active/archived to
+// success/neutral; Technology alone used the brand-identity cyan for its
+// *status* badge, which meant an active Technology's badge and its
+// identity accent were the same color and a coverage/status distinction
+// (active vs archived) was invisible. Brought in line with every sibling.
 Color _statusColor(TechnologyStatus status) => switch (status) {
   TechnologyStatus.active => AppStatusColors.success,
-  TechnologyStatus.archived => Colors.grey,
+  TechnologyStatus.archived => AppStatusColors.neutral,
 };
 
 class TechnologiesScreen extends ConsumerStatefulWidget {
@@ -59,8 +66,11 @@ class _TechnologiesScreenState extends ConsumerState<TechnologiesScreen> {
     final technologiesAsync = ref.watch(technologiesStreamProvider);
 
     return Scaffold(
-      appBar: AppBar(),
       floatingActionButton: FloatingActionButton(
+        // heroTag: null avoids a hero-tag collision with other screens'
+        // FABs when two Scaffolds are briefly mounted together (e.g.
+        // HomeShell's tab-switch AnimatedSwitcher).
+        heroTag: null,
         onPressed: () => pushSlideFade(context, const TechnologyFormScreen()),
         child: const Icon(Icons.add),
       ),
@@ -78,9 +88,11 @@ class _TechnologiesScreenState extends ConsumerState<TechnologiesScreen> {
                       0,
                     ),
                     child: PageHeader(
+                      leading: PageBackButton(),
                       icon: Icons.memory_outlined,
                       title: strings.technologiesTitle,
                       subtitle: strings.technologiesSubtitle,
+                      accentColor: AppEntityColors.technology,
                     ),
                   ),
                   Expanded(
@@ -117,9 +129,11 @@ class _TechnologiesScreenState extends ConsumerState<TechnologiesScreen> {
                     0,
                   ),
                   child: PageHeader(
+                    leading: PageBackButton(),
                     icon: Icons.memory_outlined,
                     title: strings.technologiesTitle,
                     subtitle: strings.technologiesSubtitle,
+                    accentColor: AppEntityColors.technology,
                   ),
                 ),
                 Padding(
@@ -189,6 +203,7 @@ class _TechnologiesScreenState extends ConsumerState<TechnologiesScreen> {
                               label: t.status.label,
                               color: _statusColor(t.status),
                             ),
+                            accentColor: AppEntityColors.technology,
                             metaChips: [
                               if (t.category != null && t.category!.isNotEmpty)
                                 Chip(

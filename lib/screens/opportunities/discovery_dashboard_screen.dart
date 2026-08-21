@@ -108,13 +108,19 @@ class DiscoveryDashboardBody extends ConsumerWidget {
         const SizedBox(height: AppSpacing.xl),
         _HealthSection(metrics: metrics, strings: strings),
         const SizedBox(height: AppSpacing.xl),
-        SectionHeader(title: strings.discoveryHealthLabel),
+        SectionHeader(
+          title: strings.discoveryHealthLabel,
+          accentColor: AppStatusColors.info,
+        ),
         const SizedBox(height: AppSpacing.sm),
         _KpiGrid(metrics: metrics, strings: strings),
         const SizedBox(height: AppSpacing.xl),
         _SyncTimingSection(metrics: metrics, strings: strings),
         const SizedBox(height: AppSpacing.xl),
-        SectionHeader(title: strings.recentSyncActivityLabel),
+        SectionHeader(
+          title: strings.recentSyncActivityLabel,
+          accentColor: AppStatusColors.info,
+        ),
         const SizedBox(height: AppSpacing.sm),
         if (recentRuns.isEmpty)
           Padding(

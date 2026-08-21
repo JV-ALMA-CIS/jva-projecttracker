@@ -67,7 +67,10 @@ class NotificationCenterScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(AppSpacing.lg),
               children: [
                 if (recommendationItems.isNotEmpty) ...[
-                  SectionHeader(title: strings.recommendationsGroupLabel),
+                  SectionHeader(
+                    title: strings.recommendationsGroupLabel,
+                    accentColor: AppStatusColors.ai,
+                  ),
                   for (final (i, n) in recommendationItems.indexed)
                     FadeSlideIn(
                       index: i,
@@ -85,7 +88,10 @@ class NotificationCenterScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.lg),
                 ],
                 if (deadlineItems.isNotEmpty) ...[
-                  SectionHeader(title: strings.upcomingDeadlinesGroupLabel),
+                  SectionHeader(
+                    title: strings.upcomingDeadlinesGroupLabel,
+                    accentColor: AppStatusColors.warning,
+                  ),
                   for (final (i, n) in deadlineItems.indexed)
                     FadeSlideIn(
                       index: i,
