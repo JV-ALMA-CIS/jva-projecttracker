@@ -54,7 +54,7 @@ class OpenSourceLinkButton extends ConsumerStatefulWidget {
 class _OpenSourceLinkButtonState extends ConsumerState<OpenSourceLinkButton> {
   bool _marking = false;
 
-  void _open() {
+  Future<void> _open() async {
     final strings = ref.read(appStringsProvider);
     final uri = normalizeExternalUrl(widget.rawUrl);
     if (uri == null) {
@@ -62,6 +62,33 @@ class _OpenSourceLinkButtonState extends ConsumerState<OpenSourceLinkButton> {
         SnackBar(content: Text(strings.noValidExternalLinkMessage)),
       );
       return;
+    }
+
+    // An unverified link — never confirmed to actually load, either because
+    // the discovery-time reachability check failed or hasn't run at all —
+    // gets one extra confirmation step before opening, rather than being
+    // launched exactly as trustingly as a confirmed link. [verified] is only
+    // ever explicitly `false` here (`null` callers, which don't track
+    // verification at all, skip straight to launching, same as `true`).
+    if (widget.verified == false) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(strings.unverifiedLinkDialogTitle),
+          content: Text(strings.unverifiedLinkDialogMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(strings.cancelButton),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(strings.openAnywayButton),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
     }
 
     launchUrl(uri, mode: LaunchMode.externalApplication);

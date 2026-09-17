@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:jva_projecttracker/theme/app_scale.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
 
 /// The platform's one page-title pattern: title + optional subtitle/icon/
@@ -9,6 +10,17 @@ import 'package:jva_projecttracker/theme/app_theme.dart';
 /// introducing a second, parallel typography naming system — the hierarchy
 /// comes from consistent *use* of the one scale that already exists, not
 /// from new style names.
+///
+/// Scales itself continuously against the row's own available width (via
+/// [LayoutBuilder] + [AppScale.lerp], not the full window width — this also
+/// does the right thing inside a narrower split-view pane) rather than
+/// switching between a couple of fixed looks: the icon chip size/padding,
+/// the title's font size, and the inter-element gaps are all formulas over
+/// the exact measured width, so a 400dp-wide header and a 420dp-wide one
+/// render very slightly differently instead of both being forced into the
+/// same "small" or "large" preset. This is what keeps the header from
+/// crowding on a small phone without needing a name for every phone size
+/// that exists today or ships tomorrow.
 class PageHeader extends StatelessWidget {
   const PageHeader({
     super.key,
@@ -43,50 +55,84 @@ class PageHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final color = accentColor ?? theme.colorScheme.primary;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (leading != null) ...[
-          leading!,
-          const SizedBox(width: AppSpacing.xs),
-        ],
-        if (icon != null) ...[
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppRadii.input),
-            ),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(width: AppSpacing.md),
-        ],
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                  color: accentColor != null ? color : null,
-                ),
-              ),
-              if (subtitle != null && subtitle!.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  subtitle!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+
+        final iconSize = AppScale.lerp(width, 18, 24);
+        final iconPadding = AppScale.lerp(width, AppSpacing.xs, AppSpacing.sm);
+        final iconGap = AppScale.lerp(width, AppSpacing.sm, AppSpacing.md);
+        final actionGap = AppScale.lerp(width, AppSpacing.sm, AppSpacing.md);
+
+        // headlineSmall's own fontSize is the "large" end of the curve;
+        // 20 is roughly titleLarge's size, the "small" end — interpolating
+        // the raw number (rather than switching between the two named
+        // TextTheme styles) is what makes the title's size continuous
+        // instead of a single jump at one width.
+        final baseTitleStyle = theme.textTheme.headlineSmall;
+        final titleFontSize = AppScale.lerp(
+          width,
+          20,
+          baseTitleStyle?.fontSize ?? 24,
+        );
+
+        // Only a genuinely cramped width needs the title to wrap to a
+        // second line at all — above that, one line plus ellipsis reads
+        // better than an early wrap.
+        final titleMaxLines = width < 340 ? 2 : 1;
+        final subtitleMaxLines = width < 340 ? 1 : 2;
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (leading != null) ...[
+              leading!,
+              const SizedBox(width: AppSpacing.xs),
             ],
-          ),
-        ),
-        if (action != null) ...[const SizedBox(width: AppSpacing.md), action!],
-      ],
+            if (icon != null) ...[
+              Container(
+                padding: EdgeInsets.all(iconPadding),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppRadii.input),
+                ),
+                child: Icon(icon, color: color, size: iconSize),
+              ),
+              SizedBox(width: iconGap),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: titleMaxLines,
+                    overflow: TextOverflow.ellipsis,
+                    style: baseTitleStyle?.copyWith(
+                      fontSize: titleFontSize,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                      color: accentColor != null ? color : null,
+                    ),
+                  ),
+                  if (subtitle != null && subtitle!.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      subtitle!,
+                      maxLines: subtitleMaxLines,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (action != null) ...[SizedBox(width: actionGap), action!],
+          ],
+        );
+      },
     );
   }
 }

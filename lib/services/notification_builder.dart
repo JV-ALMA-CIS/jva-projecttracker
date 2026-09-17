@@ -13,18 +13,66 @@ const int kDeadlineWindowDays = 7;
 /// pre-filters out anything that isn't at least moderately urgent.
 const int kDeadlineHighPriorityDays = 2;
 
-final Set<OpportunityStatus> _closedStatuses = {
+/// An opportunity's match score (`overallMatchScore`, falling back to
+/// `fitScorePercent` when no AI Match Analysis pass has run yet) at or
+/// above this is notification-worthy.
+const int kMatchScoreNotifyThreshold = 70;
+
+/// An opportunity in one of these statuses is considered closed for
+/// notification purposes — excluded from every notification type
+/// ([buildNotifications]) and from the durable match-notification mark
+/// ([shouldMarkMatchNotificationSent]).
+final Set<OpportunityStatus> closedOpportunityStatuses = {
   OpportunityStatus.won,
   OpportunityStatus.lost,
   OpportunityStatus.dismissed,
 };
 
+/// An opportunity's current match score ([Opportunity.overallMatchScore],
+/// falling back to [Opportunity.fitScorePercent] — same precedence used
+/// throughout this file), or null if it isn't notification-worthy at all
+/// (closed, or below [kMatchScoreNotifyThreshold]).
+int? matchNotifyScoreFor(Opportunity opportunity) {
+  if (closedOpportunityStatuses.contains(opportunity.status)) return null;
+  final score = opportunity.overallMatchScore ?? opportunity.fitScorePercent;
+  if (score < kMatchScoreNotifyThreshold) return null;
+  return score;
+}
+
+/// Buckets a score into its ten-point band (70 -> 70, 79 -> 70, 80 -> 80,
+/// ...) — the unit both the ephemeral notification id ([buildNotifications])
+/// and the durable [Opportunity.lastNotifiedScore] mark key off, so a small
+/// fluctuation within the same band is deduped while a jump into a new band
+/// is treated as a genuinely new, renotify-worthy event.
+int matchScoreBucket(int score) => (score ~/ 10) * 10;
+
+/// True when [opportunity]'s current match score is notification-worthy
+/// ([matchNotifyScoreFor]) and its [Opportunity.lastNotifiedScore] hasn't
+/// already recorded that same [matchScoreBucket] — i.e. this is a genuinely
+/// new or meaningfully-increased match crossing [kMatchScoreNotifyThreshold],
+/// not a repeat of one already durably recorded. Used by
+/// `MatchNotificationWatcher` to decide whether to write
+/// `OpportunityService.markMatchNotificationSent`.
+bool shouldMarkMatchNotificationSent(Opportunity opportunity) {
+  final score = matchNotifyScoreFor(opportunity);
+  if (score == null) return false;
+
+  final lastNotified = opportunity.lastNotifiedScore;
+  if (lastNotified != null &&
+      matchScoreBucket(lastNotified) == matchScoreBucket(score)) {
+    return false;
+  }
+  return true;
+}
+
 /// Builds the Notification Center's contents purely from already-live data
 /// — no Firestore collection of its own (see ADR-007). Every active
 /// [Recommendation] becomes one notification (reusing its own priority/
 /// title/reasoning directly); every still-open [Opportunity] with a
-/// deadline inside [kDeadlineWindowDays] becomes another. [readIds] marks
-/// which are already read (see `NotificationPreferencesService`).
+/// deadline inside [kDeadlineWindowDays] becomes another; every still-open
+/// [Opportunity] whose match score is at or above [kMatchScoreNotifyThreshold]
+/// becomes a third. [readIds] marks which are already read (see
+/// `NotificationPreferencesService`).
 ///
 /// [activeRecommendations] is expected already priority-sorted (as
 /// `activeRecommendationsProvider` provides) — that order is preserved
@@ -54,7 +102,7 @@ List<NotificationItem> buildNotifications({
   for (final opportunity in opportunities) {
     final deadline = opportunity.deadline;
     if (deadline == null) continue;
-    if (_closedStatuses.contains(opportunity.status)) continue;
+    if (closedOpportunityStatuses.contains(opportunity.status)) continue;
 
     final daysLeft = deadline.difference(now).inDays;
     if (daysLeft > kDeadlineWindowDays) continue;
@@ -77,5 +125,38 @@ List<NotificationItem> buildNotifications({
   }
   deadlineItems.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-  return [...recommendationItems, ...deadlineItems];
+  final matchScoreItems = <NotificationItem>[];
+  for (final opportunity in opportunities) {
+    final score = matchNotifyScoreFor(opportunity);
+    if (score == null) continue;
+
+    // Bucketed by decade (70-79, 80-89, ...) rather than the raw opportunity
+    // id alone: once a user marks a match-score notification read, the same
+    // id would otherwise stay "read" forever even if the score later climbs
+    // meaningfully (e.g. a re-run of Match Analysis moves 72 -> 88). Keying
+    // the id on the bucket means a jump into a new decade band produces a
+    // fresh, unread id, while small fluctuations within the same band stay
+    // deduped against the already-read entry — no extra Firestore field
+    // needed, since `NotificationReadController` already tracks read ids by
+    // string key.
+    final bucket = matchScoreBucket(score);
+    final id = 'matchScore:${opportunity.id}:$bucket';
+    matchScoreItems.add(
+      NotificationItem(
+        id: id,
+        type: NotificationType.matchScore,
+        priority: OpportunityPriority.high,
+        title: opportunity.title,
+        matchScorePercent: score,
+        timestamp: opportunity.matchAnalyzedAt ?? opportunity.updatedAt,
+        relatedOpportunityIds: [opportunity.id],
+        isRead: readIds.contains(id),
+      ),
+    );
+  }
+  matchScoreItems.sort(
+    (a, b) => b.matchScorePercent!.compareTo(a.matchScorePercent!),
+  );
+
+  return [...recommendationItems, ...deadlineItems, ...matchScoreItems];
 }

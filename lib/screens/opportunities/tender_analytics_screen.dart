@@ -23,7 +23,15 @@ class TenderAnalyticsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = ref.watch(appStringsProvider);
-    final summary = ref.watch(tenderAnalyticsSummaryProvider);
+    // Gate on the raw stream first — tenderAnalyticsSummaryProvider derives
+    // `discovered` via tenderSourcedOpportunitiesProvider's
+    // `opportunitiesStreamProvider.value ?? const []`, which can't
+    // distinguish "still loading"/"errored" from "genuinely zero
+    // opportunities". Watching the stream here lets this widget show a
+    // spinner/error instead of jumping straight to the empty state before
+    // the first snapshot has even arrived — same fix as
+    // discovery_dashboard_screen.dart's DiscoveryDashboardBody.
+    final opportunitiesAsync = ref.watch(opportunitiesStreamProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -44,54 +52,78 @@ class TenderAnalyticsScreen extends ConsumerWidget {
               ),
             ),
             Expanded(
-              child: summary.discovered == 0
-                  ? EmptyState(
+              child: opportunitiesAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text(strings.errorPrefix(e))),
+                data: (opportunities) {
+                  if (opportunities.isEmpty) {
+                    return EmptyState(
                       icon: Icons.query_stats_outlined,
                       title: strings.noAnalyticsDataYetMessage,
-                    )
-                  : ListView(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.lg,
-                        AppSpacing.md,
-                        AppSpacing.lg,
-                        AppSpacing.lg,
-                      ),
-                      children: [
-                        _SummaryGrid(summary: summary, strings: strings),
-                        const SizedBox(height: AppSpacing.xl),
-                        SectionHeader(
-                          title: strings.monthlyTrendLabel,
-                          accentColor: AppStatusColors.info,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        const _MonthlyTrendChart(),
-                        const SizedBox(height: AppSpacing.xl),
-                        SectionHeader(
-                          title: strings.bestPerformingSourcesLabel,
-                          accentColor: AppStatusColors.info,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        const _SourceRanking(),
-                        const SizedBox(height: AppSpacing.xl),
-                        SectionHeader(
-                          title: strings.bestPerformingBusinessUnitsLabel,
-                          accentColor: AppStatusColors.info,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        const _BusinessUnitRanking(),
-                        const SizedBox(height: AppSpacing.xl),
-                        SectionHeader(
-                          title: strings.bestPerformingSectorsLabel,
-                          accentColor: AppStatusColors.info,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        const _SectorRanking(),
-                      ],
-                    ),
+                    );
+                  }
+                  return const _TenderAnalyticsContent();
+                },
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The analytics screen's actual content — unchanged from before, just
+/// extracted so [TenderAnalyticsScreen.build] can gate on the opportunities
+/// AsyncValue first. Still reads [tenderAnalyticsSummaryProvider] and the
+/// other derived ranking providers exactly as before; no calculation logic
+/// changed.
+class _TenderAnalyticsContent extends ConsumerWidget {
+  const _TenderAnalyticsContent();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
+    final summary = ref.watch(tenderAnalyticsSummaryProvider);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      children: [
+        _SummaryGrid(summary: summary, strings: strings),
+        const SizedBox(height: AppSpacing.xl),
+        SectionHeader(
+          title: strings.monthlyTrendLabel,
+          accentColor: AppStatusColors.info,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        const _MonthlyTrendChart(),
+        const SizedBox(height: AppSpacing.xl),
+        SectionHeader(
+          title: strings.bestPerformingSourcesLabel,
+          accentColor: AppStatusColors.info,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        const _SourceRanking(),
+        const SizedBox(height: AppSpacing.xl),
+        SectionHeader(
+          title: strings.bestPerformingBusinessUnitsLabel,
+          accentColor: AppStatusColors.info,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        const _BusinessUnitRanking(),
+        const SizedBox(height: AppSpacing.xl),
+        SectionHeader(
+          title: strings.bestPerformingSectorsLabel,
+          accentColor: AppStatusColors.info,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        const _SectorRanking(),
+      ],
     );
   }
 }

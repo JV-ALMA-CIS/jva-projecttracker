@@ -49,6 +49,14 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- FCM foundation: lets iOS wake the app to handle a remote push
+	     (including a silent/background one). Minimal entry only — no APNs
+	     capability/entitlement work or foreground-presentation handling is
+	     added yet, since no push is actually sent today. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

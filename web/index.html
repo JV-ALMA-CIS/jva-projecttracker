@@ -42,5 +42,18 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+
+  <!--
+    Registered explicitly (rather than relying on firebase_messaging_web's
+    own auto-registration) so background/closed-tab push notifications work
+    regardless of plugin version — see web/firebase-messaging-sw.js. A
+    duplicate registration at the same scope is a harmless no-op if the
+    plugin also registers it.
+  -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('firebase-messaging-sw.js');
+    }
+  </script>
 </body>
 </html>

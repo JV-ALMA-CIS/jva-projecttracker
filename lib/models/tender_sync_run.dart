@@ -81,9 +81,10 @@ class TenderSyncRun {
       trigger: _triggerFromName(data['trigger'] as String?),
       startedAt: _dateFromTimestamp(data['startedAt']) ?? DateTime.now(),
       completedAt: _dateFromTimestamp(data['completedAt']),
-      candidatesFound: data['candidatesFound'] as int? ?? 0,
-      opportunitiesCreated: data['opportunitiesCreated'] as int? ?? 0,
-      duplicatesSkipped: data['duplicatesSkipped'] as int? ?? 0,
+      candidatesFound: (data['candidatesFound'] as num?)?.toInt() ?? 0,
+      opportunitiesCreated:
+          (data['opportunitiesCreated'] as num?)?.toInt() ?? 0,
+      duplicatesSkipped: (data['duplicatesSkipped'] as num?)?.toInt() ?? 0,
       errorMessage: data['errorMessage'] as String?,
     );
   }

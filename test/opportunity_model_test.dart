@@ -232,6 +232,51 @@ void main() {
     },
   );
 
+  test('Opportunity round-trips IT-tender fields', () {
+    final now = DateTime.utc(2024, 6, 1);
+    final opportunity = Opportunity(
+      id: 'opportunity-it-1',
+      title: 'ICT infrastructure upgrade tender',
+      description: 'Upgrade of core network infrastructure',
+      sourceUrl: 'https://example.com/tender/it-1',
+      discoveredAt: now,
+      updatedAt: now,
+      procuringOrganization: 'KTDA',
+      tenderReferenceNumber: 'KTDA/ICT/2026/014',
+      requiredTechnologies: const ['Flutter', 'Firebase', 'Cloud Functions'],
+    );
+
+    final restored = Opportunity.fromMap(opportunity.id, opportunity.toMap());
+
+    expect(restored.procuringOrganization, 'KTDA');
+    expect(restored.tenderReferenceNumber, 'KTDA/ICT/2026/014');
+    expect(restored.requiredTechnologies, [
+      'Flutter',
+      'Firebase',
+      'Cloud Functions',
+    ]);
+  });
+
+  test(
+    'Opportunity defaults IT-tender fields when reading a legacy document',
+    () {
+      final now = DateTime.utc(2024, 6, 1);
+      final restored = Opportunity.fromMap('opportunity-it-2', {
+        'title': 'Legacy opportunity',
+        'description': 'Discovered before IT-tender fields existed',
+        'sourceUrl': 'https://example.com/tender/it-2',
+        'status': 'discovered',
+        'fitScorePercent': 60,
+        'discoveredAt': Timestamp.fromDate(now),
+        'updatedAt': Timestamp.fromDate(now),
+      });
+
+      expect(restored.procuringOrganization, isNull);
+      expect(restored.tenderReferenceNumber, isNull);
+      expect(restored.requiredTechnologies, isEmpty);
+    },
+  );
+
   test(
     'Opportunity round-trips discoverySourceId/discoverySourceType and the archived status',
     () {
@@ -331,6 +376,132 @@ void main() {
 
       expect(opportunity.sourceUrlVerified, isFalse);
       expect(opportunity.sourceUrlVerifiedAt, isNull);
+    },
+  );
+
+  test('Opportunity round-trips geographyPriority', () {
+    final now = DateTime.utc(2024, 6, 1);
+    final opportunity = Opportunity(
+      id: 'opportunity-8',
+      title: 'Kenya tender',
+      description: '',
+      sourceUrl: 'https://example.com/tender/8',
+      geographyPriority: GeographyPriority.kenya,
+      discoveredAt: now,
+      updatedAt: now,
+    );
+
+    final restored = Opportunity.fromMap(opportunity.id, opportunity.toMap());
+
+    expect(restored.geographyPriority, GeographyPriority.kenya);
+  });
+
+  test('Opportunity defaults geographyPriority to null for a legacy document '
+      'predating this field', () {
+    final now = DateTime.utc(2024, 6, 1);
+    final restored = Opportunity.fromMap('opportunity-9', {
+      'title': 'Legacy opportunity',
+      'description': 'Discovered before geographyPriority existed',
+      'sourceUrl': 'https://example.com/tender/9',
+      'status': 'discovered',
+      'fitScorePercent': 50,
+      'discoveredAt': Timestamp.fromDate(now),
+      'updatedAt': Timestamp.fromDate(now),
+    });
+
+    expect(restored.geographyPriority, isNull);
+  });
+
+  test(
+    'Opportunity round-trips lastNotifiedScore and matchNotificationSentAt',
+    () {
+      final now = DateTime.utc(2024, 6, 1);
+      final notifiedAt = DateTime.utc(2024, 6, 2);
+      final opportunity = Opportunity(
+        id: 'opportunity-10',
+        title: 'Strong match tender',
+        description: '',
+        sourceUrl: 'https://example.com/tender/10',
+        lastNotifiedScore: 82,
+        matchNotificationSentAt: notifiedAt,
+        discoveredAt: now,
+        updatedAt: now,
+      );
+
+      final restored = Opportunity.fromMap(opportunity.id, opportunity.toMap());
+
+      expect(restored.lastNotifiedScore, 82);
+      expect(restored.matchNotificationSentAt?.toUtc(), notifiedAt.toUtc());
+    },
+  );
+
+  test('Opportunity defaults lastNotifiedScore/matchNotificationSentAt to null '
+      'for a legacy document predating these fields', () {
+    final now = DateTime.utc(2024, 6, 1);
+    final restored = Opportunity.fromMap('opportunity-11', {
+      'title': 'Legacy opportunity',
+      'description': 'Discovered before match notifications existed',
+      'sourceUrl': 'https://example.com/tender/11',
+      'status': 'discovered',
+      'fitScorePercent': 50,
+      'discoveredAt': Timestamp.fromDate(now),
+      'updatedAt': Timestamp.fromDate(now),
+    });
+
+    expect(restored.lastNotifiedScore, isNull);
+    expect(restored.matchNotificationSentAt, isNull);
+  });
+
+  test('Opportunity round-trips sourceUrlIsFallback: true', () {
+    final now = DateTime.utc(2024, 6, 1);
+    final opportunity = Opportunity(
+      id: 'opportunity-12',
+      title: 'Fallback tender',
+      description: '',
+      sourceUrl: 'https://example.com',
+      sourceUrlIsFallback: true,
+      discoveredAt: now,
+      updatedAt: now,
+    );
+
+    final restored = Opportunity.fromMap(opportunity.id, opportunity.toMap());
+
+    expect(restored.sourceUrlIsFallback, isTrue);
+  });
+
+  test(
+    'Opportunity defaults sourceUrlIsFallback to false for a legacy document '
+    'predating this field',
+    () {
+      final now = DateTime.utc(2024, 6, 1);
+      final restored = Opportunity.fromMap('opportunity-13', {
+        'title': 'Legacy opportunity',
+        'description': 'Discovered before sourceUrlIsFallback existed',
+        'sourceUrl': 'https://example.com/tender/13',
+        'status': 'discovered',
+        'fitScorePercent': 50,
+        'discoveredAt': Timestamp.fromDate(now),
+        'updatedAt': Timestamp.fromDate(now),
+      });
+
+      expect(restored.sourceUrlIsFallback, isFalse);
+    },
+  );
+
+  test(
+    'a freshly-constructed Opportunity with no explicit sourceUrlIsFallback defaults to false',
+    () {
+      final now = DateTime.utc(2024, 6, 1);
+      final opportunity = Opportunity(
+        id: 'opportunity-14',
+        title: 'New opportunity',
+        description: '',
+        sourceUrl: 'https://example.com/tender/14',
+        discoveredAt: now,
+        updatedAt: now,
+      );
+
+      expect(opportunity.sourceUrlIsFallback, isFalse);
     },
   );
 }

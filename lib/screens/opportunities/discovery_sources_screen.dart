@@ -350,6 +350,9 @@ class _ManualOpportunityDialogState
   final _descriptionController = TextEditingController();
   final _clientController = TextEditingController();
   final _sourceUrlController = TextEditingController();
+  final _procuringOrganizationController = TextEditingController();
+  final _tenderReferenceNumberController = TextEditingController();
+  final _requiredTechnologiesController = TextEditingController();
 
   @override
   void dispose() {
@@ -357,6 +360,9 @@ class _ManualOpportunityDialogState
     _descriptionController.dispose();
     _clientController.dispose();
     _sourceUrlController.dispose();
+    _procuringOrganizationController.dispose();
+    _tenderReferenceNumberController.dispose();
+    _requiredTechnologiesController.dispose();
     super.dispose();
   }
 
@@ -367,6 +373,13 @@ class _ManualOpportunityDialogState
     final now = DateTime.now();
     final client = _clientController.text.trim();
     final sourceUrl = _sourceUrlController.text.trim();
+    final procuringOrganization = _procuringOrganizationController.text.trim();
+    final tenderReferenceNumber = _tenderReferenceNumberController.text.trim();
+    final requiredTechnologies = _requiredTechnologiesController.text
+        .split(',')
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
 
     await ref
         .read(opportunityServiceProvider)
@@ -381,6 +394,13 @@ class _ManualOpportunityDialogState
             sourceUrlVerified: true,
             sourceUrlVerifiedAt: now,
             client: client.isEmpty ? null : client,
+            procuringOrganization: procuringOrganization.isEmpty
+                ? null
+                : procuringOrganization,
+            tenderReferenceNumber: tenderReferenceNumber.isEmpty
+                ? null
+                : tenderReferenceNumber,
+            requiredTechnologies: requiredTechnologies,
             discoveredAt: now,
             updatedAt: now,
             discoverySourceType: DiscoverySourceType.manual,
@@ -423,6 +443,27 @@ class _ManualOpportunityDialogState
             TextField(
               controller: _sourceUrlController,
               decoration: InputDecoration(labelText: strings.fieldSourceUrl),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _procuringOrganizationController,
+              decoration: InputDecoration(
+                labelText: strings.fieldProcuringOrganization,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _tenderReferenceNumberController,
+              decoration: InputDecoration(
+                labelText: strings.fieldTenderReferenceNumber,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _requiredTechnologiesController,
+              decoration: InputDecoration(
+                labelText: strings.fieldRequiredTechnologies,
+              ),
             ),
           ],
         ),

@@ -18,6 +18,14 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.auth.uid == userId
         && request.resource.data.role == 'user';
       allow update, delete: if false;
+
+      // FCM foundation — one document per device token, written by
+      // FcmTokenService on sign-in. Only the owning user may read/write
+      // their own tokens; the actual push send (a future Cloud Function)
+      // uses the Admin SDK and bypasses these rules regardless.
+      match /fcmTokens/{tokenId} {
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      }
     }
 
     // Internal tool: any authenticated JVA staff account may read/write.

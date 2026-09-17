@@ -43,6 +43,7 @@ const _kTabColors = [
   AppStatusColors.warning,
   AppStatusColors.ai,
   AppStatusColors.success,
+  AppStatusColors.danger,
 ];
 
 class OpportunitiesScreen extends ConsumerStatefulWidget {
@@ -56,7 +57,7 @@ class OpportunitiesScreen extends ConsumerStatefulWidget {
 class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController = TabController(
-    length: 4,
+    length: 5,
     vsync: this,
   );
   bool _backfilling = false;
@@ -292,6 +293,13 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
                 style: TextStyle(color: _kTabColors[3]),
               ),
             ),
+            Tab(
+              icon: Icon(Icons.fact_check_outlined, color: _kTabColors[4]),
+              child: Text(
+                strings.evaluationTabLabel,
+                style: TextStyle(color: _kTabColors[4]),
+              ),
+            ),
           ],
         ),
       ),
@@ -305,11 +313,63 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
                 const OpportunityInboxBody(),
                 const DiscoveryDashboardBody(),
                 const OpportunityExploreBody(),
+                const _EvaluationTab(),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Dedicated Evaluation tab — shows only opportunities whose
+/// [OpportunityPipelineStage] is `evaluation` (i.e. selected/viewed for
+/// serious consideration), preserving every existing field and using the
+/// same tile/lifecycle-transition UI as the Pipeline tab so moving an
+/// opportunity onward (bid/no-bid via [OpportunityService.recordStrategicDecision],
+/// or through the pipeline stages via [OpportunityService.transitionStage])
+/// works identically here. Previously this filter existed only as a
+/// "Under Evaluation" FilterChip buried inside the Pipeline tab; this tab
+/// makes it a first-class destination per the explicit requirement that
+/// opportunities under evaluation appear in a separate tab.
+class _EvaluationTab extends ConsumerWidget {
+  const _EvaluationTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
+    final opportunitiesAsync = ref.watch(opportunitiesStreamProvider);
+
+    return opportunitiesAsync.when(
+      data: (all) {
+        final underEvaluation = all
+            .where(
+              (o) => o.pipelineStage == OpportunityPipelineStage.evaluation,
+            )
+            .toList();
+
+        if (underEvaluation.isEmpty) {
+          return EmptyState(
+            icon: Icons.fact_check_outlined,
+            title: strings.noOpportunitiesUnderEvaluation,
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.only(top: AppSpacing.md),
+          itemCount: underEvaluation.length,
+          itemBuilder: (context, i) {
+            final opportunity = underEvaluation[i];
+            return FadeSlideIn(
+              index: i,
+              child: _OpportunitiesTile(opportunity: opportunity),
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text(strings.errorPrefix(e))),
     );
   }
 }
@@ -338,6 +398,7 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
   OpportunityBuFilter _buFilter = const OpportunityBuFilter.all();
   OpportunityFacetFilters _facets = const OpportunityFacetFilters();
   bool _wonOnly = false;
+  bool _underEvaluationOnly = false;
 
   @override
   void dispose() {
@@ -351,6 +412,7 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
       _facets = const OpportunityFacetFilters();
       _searchController.clear();
       _wonOnly = false;
+      _underEvaluationOnly = false;
     });
   }
 
@@ -430,8 +492,16 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
         final wonFiltered = _wonOnly
             ? buFiltered.where(isWonOpportunity).toList()
             : buFiltered;
+        final evaluationFiltered = _underEvaluationOnly
+            ? wonFiltered
+                  .where(
+                    (o) =>
+                        o.pipelineStage == OpportunityPipelineStage.evaluation,
+                  )
+                  .toList()
+            : wonFiltered;
         final filtered = filterOpportunities(
-          wonFiltered,
+          evaluationFiltered,
           const OpportunityBuFilter.all(),
           _facets,
           now: DateTime.now(),
@@ -488,6 +558,14 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
                     selected: _wonOnly,
                     onSelected: (selected) =>
                         setState(() => _wonOnly = selected),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  FilterChip(
+                    avatar: const Icon(Icons.fact_check_outlined, size: 16),
+                    label: Text(strings.underEvaluationFilterLabel),
+                    selected: _underEvaluationOnly,
+                    onSelected: (selected) =>
+                        setState(() => _underEvaluationOnly = selected),
                   ),
                 ],
               ),
@@ -925,6 +1003,34 @@ class _OpportunitiesTile extends ConsumerWidget {
                   children: [
                     Text(opportunity.description),
                     const SizedBox(height: 8),
+                    if (opportunity.procuringOrganization != null ||
+                        opportunity.tenderReferenceNumber != null ||
+                        opportunity.requiredTechnologies.isNotEmpty) ...[
+                      Text(
+                        strings.tenderDetailsSectionTitle,
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      if (opportunity.procuringOrganization != null)
+                        Text(
+                          '${strings.fieldProcuringOrganization}: '
+                          '${opportunity.procuringOrganization}',
+                        ),
+                      if (opportunity.tenderReferenceNumber != null)
+                        Text(
+                          '${strings.fieldTenderReferenceNumber}: '
+                          '${opportunity.tenderReferenceNumber}',
+                        ),
+                      if (opportunity.requiredTechnologies.isNotEmpty)
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: opportunity.requiredTechnologies
+                              .map((t) => Chip(label: Text(t)))
+                              .toList(),
+                        ),
+                      const SizedBox(height: 8),
+                    ],
                     if (opportunity.fitReasoning.isNotEmpty) ...[
                       Text(
                         strings.fitReasoningLabel,
@@ -1085,6 +1191,27 @@ class _OpportunitiesTile extends ConsumerWidget {
                                 .read(opportunityServiceProvider)
                                 .markSourceUrlVerified(opportunity.id),
                           ),
+                        // A distinct signal from the unverified-link warning
+                        // already shown above: this link isn't just
+                        // unconfirmed, it's not even a tender-specific page —
+                        // the grounding cross-check rejected the AI's
+                        // suggested URL and this points at the source's own
+                        // website instead. See
+                        // Opportunity.sourceUrlIsFallback's doc comment.
+                        if (opportunity.sourceUrlIsFallback)
+                          Tooltip(
+                            message: strings.sourceUrlFallbackBadgeTooltip,
+                            child: Chip(
+                              avatar: const Icon(
+                                Icons.link_off_outlined,
+                                size: 14,
+                              ),
+                              label: Text(strings.sourceUrlFallbackBadgeLabel),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
                         FilledButton.icon(
                           onPressed: () => pushSlideFade(
                             context,
@@ -1095,6 +1222,35 @@ class _OpportunitiesTile extends ConsumerWidget {
                           icon: const Icon(Icons.workspaces_outlined, size: 18),
                           label: Text(strings.openWorkspaceButton),
                         ),
+                        if (opportunity.pipelineStage !=
+                            OpportunityPipelineStage.evaluation)
+                          Consumer(
+                            builder: (context, ref, _) {
+                              return OutlinedButton.icon(
+                                onPressed: () {
+                                  final actor = ref
+                                      .read(currentUserProfileProvider)
+                                      .value
+                                      ?.email;
+                                  ref
+                                      .read(opportunityServiceProvider)
+                                      .transitionStage(
+                                        opportunityId: opportunity.id,
+                                        newStage:
+                                            OpportunityPipelineStage.evaluation,
+                                        actor: actor,
+                                      );
+                                },
+                                icon: const Icon(
+                                  Icons.fact_check_outlined,
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  strings.moveToUnderEvaluationButton,
+                                ),
+                              );
+                            },
+                          ),
                         if (isWonOpportunity(opportunity))
                           Consumer(
                             builder: (context, ref, _) {
@@ -1177,6 +1333,7 @@ class _BulkCleanupDialogState extends ConsumerState<_BulkCleanupDialog> {
   String _keyword = '';
   bool _deleting = false;
   bool _selectAll = false;
+  bool _offRegionOnly = false;
 
   @override
   void dispose() {
@@ -1186,7 +1343,7 @@ class _BulkCleanupDialogState extends ConsumerState<_BulkCleanupDialog> {
 
   Future<void> _delete(List<Opportunity> matches) async {
     final strings = ref.read(appStringsProvider);
-    if (_selectAll) {
+    if (_selectAll || _offRegionOnly) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -1236,6 +1393,8 @@ class _BulkCleanupDialogState extends ConsumerState<_BulkCleanupDialog> {
     final trimmedKeyword = _keyword.trim();
     final matches = _selectAll
         ? all
+        : _offRegionOnly
+        ? all.where(isOffRegionOpportunity).where(isSafeToBulkCleanup).toList()
         : trimmedKeyword.isEmpty
         ? const <Opportunity>[]
         : all.where((o) => matchesSearchQuery(o, trimmedKeyword)).toList();
@@ -1257,15 +1416,30 @@ class _BulkCleanupDialogState extends ConsumerState<_BulkCleanupDialog> {
               TextField(
                 controller: _keywordController,
                 autofocus: true,
-                enabled: !_selectAll,
+                enabled: !_selectAll && !_offRegionOnly,
                 decoration: InputDecoration(
                   labelText: strings.bulkCleanupKeywordFieldLabel,
                 ),
                 onChanged: (v) => setState(() => _keyword = v),
               ),
               CheckboxListTile(
+                value: _offRegionOnly,
+                onChanged: _selectAll
+                    ? null
+                    : (v) => setState(() => _offRegionOnly = v ?? false),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(strings.bulkCleanupOffRegionLabel),
+                subtitle: Text(
+                  strings.bulkCleanupOffRegionCaption,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              CheckboxListTile(
                 value: _selectAll,
-                onChanged: (v) => setState(() => _selectAll = v ?? false),
+                onChanged: _offRegionOnly
+                    ? null
+                    : (v) => setState(() => _selectAll = v ?? false),
                 contentPadding: EdgeInsets.zero,
                 controlAffinity: ListTileControlAffinity.leading,
                 title: Text(strings.bulkCleanupSelectAllLabel),
@@ -1275,7 +1449,7 @@ class _BulkCleanupDialogState extends ConsumerState<_BulkCleanupDialog> {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              if (_selectAll || trimmedKeyword.isNotEmpty)
+              if (_selectAll || _offRegionOnly || trimmedKeyword.isNotEmpty)
                 Text(
                   matches.isEmpty
                       ? strings.bulkCleanupNoMatchesMessage

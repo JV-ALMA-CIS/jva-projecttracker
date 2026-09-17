@@ -107,11 +107,22 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final Widget scaffold;
 
     if (width < AppBreakpoints.compact) {
+      // 5 destinations + labels is tight on a small phone
+      // (< AppBreakpoints.smallPhone, e.g. iPhone SE at ~375dp) — the
+      // default NavigationBar sizing was designed around 3-5 items on a
+      // ~390dp+ phone and visibly crowds/truncates below that. Dropping to
+      // `selectedLabel` (label only under the active item) recovers enough
+      // horizontal room for every icon to sit comfortably instead of
+      // squeezing all five icon+label pairs into the same row.
+      final isSmallPhone = width < AppBreakpoints.smallPhone;
       scaffold = Scaffold(
         body: SafeArea(child: _fadeSwitcher(index)),
         bottomNavigationBar: NavigationBar(
           selectedIndex: index,
           onDestinationSelected: _onDestinationSelected,
+          labelBehavior: isSmallPhone
+              ? NavigationDestinationLabelBehavior.onlyShowSelected
+              : NavigationDestinationLabelBehavior.alwaysShow,
           destinations: [
             for (final (i, destination) in destinations.indexed)
               NavigationDestination(

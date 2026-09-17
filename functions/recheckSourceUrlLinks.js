@@ -55,12 +55,17 @@ const recheckSourceUrlLinks = onSchedule(
 
     for (const doc of candidates) {
       try {
-        const sourceUrlVerified = await checkUrlReachable(doc.get("sourceUrl"));
+        const currentSourceUrl = doc.get("sourceUrl");
+        const { reachable: sourceUrlVerified, finalUrl } =
+          await checkUrlReachable(currentSourceUrl);
         await doc.ref.update({
           sourceUrlVerified,
           sourceUrlVerifiedAt: sourceUrlVerified
             ? admin.firestore.Timestamp.now()
             : null,
+          ...(sourceUrlVerified && finalUrl && finalUrl !== currentSourceUrl
+            ? { sourceUrl: finalUrl }
+            : {}),
         });
       } catch (e) {
         logger.error(`recheckSourceUrlLinks: failed for ${doc.id}`, e);

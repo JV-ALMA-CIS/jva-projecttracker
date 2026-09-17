@@ -144,6 +144,17 @@ function looksLikeSoft404(bodyText) {
  * lets the client warn the user instead of presenting a fabricated link as
  * equally trustworthy as a real one.
  */
+/**
+ * Returns `{reachable, finalUrl}` rather than a bare boolean: both fetch
+ * calls already follow redirects (`redirect: "follow"`) to resolve a working
+ * URL, so `response.url` — the post-redirect destination the fetch actually
+ * landed on — is captured and handed back rather than discarded. Callers use
+ * `finalUrl` to store the canonical, already-resolved destination as
+ * `sourceUrl` instead of the original (possibly redirect-chained) link the
+ * AI/connector returned, so a user's "Open Tender" click lands directly on
+ * the real page with no redirect hop left to make. `finalUrl` is `null`
+ * whenever `reachable` is `false` (nothing was confirmed to resolve).
+ */
 async function checkUrlReachable(url, { timeoutMs = 5000 } = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -153,7 +164,9 @@ async function checkUrlReachable(url, { timeoutMs = 5000 } = {}) {
       signal: controller.signal,
       redirect: "follow",
     });
-    if (headRes.status >= 400 && headRes.status !== 405) return false;
+    if (headRes.status >= 400 && headRes.status !== 405) {
+      return { reachable: false, finalUrl: null };
+    }
   } catch {
     // Fall through to a GET attempt — some servers reject HEAD outright
     // (connection reset) rather than answering with 405.
@@ -173,7 +186,7 @@ async function checkUrlReachable(url, { timeoutMs = 5000 } = {}) {
       signal: getController.signal,
       redirect: "follow",
     });
-    if (getRes.status >= 400) return false;
+    if (getRes.status >= 400) return { reachable: false, finalUrl: null };
     let bodyText;
     try {
       bodyText = await getRes.text();
@@ -181,11 +194,12 @@ async function checkUrlReachable(url, { timeoutMs = 5000 } = {}) {
       // Body unreadable (e.g. binary content, stream error) — fall back to
       // trusting the status code alone rather than treating an unreadable
       // body as a failure.
-      return true;
+      return { reachable: true, finalUrl: getRes.url || url };
     }
-    return !looksLikeSoft404(bodyText);
+    if (looksLikeSoft404(bodyText)) return { reachable: false, finalUrl: null };
+    return { reachable: true, finalUrl: getRes.url || url };
   } catch {
-    return false;
+    return { reachable: false, finalUrl: null };
   } finally {
     clearTimeout(getTimeout);
   }
@@ -227,6 +241,16 @@ async function createOpportunitiesFromCandidates(
 ) {
   let created = 0;
   let duplicatesSkipped = 0;
+  // Reachability breakdown across every candidate actually written this
+  // call — surfaced in the return value (and logged by callers, see
+  // ApiConnector._syncAiSearch / runOpportunityDiscovery) so it's visible
+  // how much of the write-time protection (checkUrlReachable) is actually
+  // catching, alongside the grounding/relevance drop counts logged upstream
+  // of this function. A `sourceUrlIsFallback` write always counts toward
+  // `unverifiedCount`, never `verifiedCount` — see the per-candidate
+  // handling below.
+  let verifiedCount = 0;
+  let unverifiedCount = 0;
 
   for (const c of candidates) {
     if (!c || !c.sourceUrl || !c.title) continue;
@@ -251,14 +275,49 @@ async function createOpportunitiesFromCandidates(
       }
     }
 
-    const sourceUrlVerified = await reachabilityCheck(c.sourceUrl);
+    // A `sourceUrlIsFallback` candidate (ApiConnector._syncAiSearch's
+    // TenderSource.website fallback for a candidate the grounding
+    // cross-check rejected) points at the source's own homepage, not a
+    // tender-specific page confirmed reachable this run — skip the HTTP
+    // round-trip entirely (the source's website was presumably reachable
+    // when the TenderSource was configured, and re-checking it on every
+    // candidate that falls back to it would be redundant) and always store
+    // it as unverified: it's a "go look here" fallback, not a confirmed
+    // direct link, so the UI's unverified-link warning is the correct,
+    // honest signal for it.
+    let sourceUrl;
+    let sourceUrlVerified;
+    if (c.sourceUrlIsFallback) {
+      sourceUrl = c.sourceUrl;
+      sourceUrlVerified = false;
+    } else {
+      const reachability = await reachabilityCheck(c.sourceUrl);
+      sourceUrlVerified = reachability.reachable;
+      sourceUrl =
+        reachability.reachable && reachability.finalUrl
+          ? reachability.finalUrl
+          : c.sourceUrl;
+    }
+
+    if (sourceUrlVerified) {
+      verifiedCount += 1;
+    } else {
+      unverifiedCount += 1;
+    }
 
     await db.collection("opportunities").add({
       title: c.title,
       description: c.description || "",
-      sourceUrl: c.sourceUrl,
+      sourceUrl,
       sourceUrlVerified,
       sourceUrlVerifiedAt: sourceUrlVerified ? now : null,
+      // True only for a candidate ApiConnector._syncAiSearch rewrote to
+      // source.website after the grounding cross-check rejected its
+      // original (unconfirmed/fabricated-risk) sourceUrl — lets the UI show
+      // a distinct "fallback" badge rather than presenting it identically
+      // to a plain unverified direct link. Never true for any other write
+      // path (restJson, runOpportunityDiscovery, manual import).
+      sourceUrlIsFallback: c.sourceUrlIsFallback === true,
       client: c.client || null,
       deadline,
       status: "discovered",
@@ -268,6 +327,13 @@ async function createOpportunitiesFromCandidates(
       ),
       fitReasoning: c.fitReasoning || "",
       tags: Array.isArray(c.tags) ? c.tags : [],
+      // Set by ApiConnector._syncAiSearch (Kenya ranks above the other four
+      // East African countries — see opportunityRelevance.js). Left
+      // undefined/absent for any other write path (restJson, manual
+      // import) that doesn't compute one — same "null means not yet
+      // classified" convention runOpportunityDiscovery's equivalent field
+      // already uses.
+      ...(c.geographyPriority ? { geographyPriority: c.geographyPriority } : {}),
       discoveredAt: now,
       updatedAt: now,
       // Legacy fields kept for any code still reading discoverySource* —
@@ -282,7 +348,13 @@ async function createOpportunitiesFromCandidates(
     created += 1;
   }
 
-  return { candidatesFound: candidates.length, created, duplicatesSkipped };
+  return {
+    candidatesFound: candidates.length,
+    created,
+    duplicatesSkipped,
+    verifiedCount,
+    unverifiedCount,
+  };
 }
 
 module.exports = {

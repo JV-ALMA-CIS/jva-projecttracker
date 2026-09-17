@@ -94,10 +94,20 @@ Future<String> _seedOpportunityWithDeadline(
   final now = DateTime.utc(2024, 1, 1);
   final doc = await firestore.collection('opportunities').add({
     'title': title,
-    'description': 'Design and build rural water network',
+    // Must name an in-region country/city (see isOffRegionOpportunity in
+    // opportunity_filters.dart) — notificationsProvider filters out
+    // opportunities it can't place in Kenya/East Africa, so an
+    // otherwise-qualifying deadline notification would silently never
+    // render without this.
+    'description': 'Design and build rural water network in Nairobi, Kenya',
     'sourceUrl': 'https://example.com/tender/1',
     'status': 'reviewing',
-    'fitScorePercent': 70,
+    // Below kMatchScoreNotifyThreshold (70) deliberately — this fixture is
+    // meant to produce a deadline notification only. At/above threshold, it
+    // would *also* produce a matchScore notification with the same title,
+    // rendering "Rural water tender" twice and making find.text(...) below
+    // ambiguous.
+    'fitScorePercent': 50,
     'deadline': deadline,
     'discoveredAt': now,
     'updatedAt': now,

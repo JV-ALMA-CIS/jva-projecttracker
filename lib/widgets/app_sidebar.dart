@@ -4,6 +4,7 @@ import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/screens/settings/settings_screen.dart';
 import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/theme/app_page_route.dart';
+import 'package:jva_projecttracker/theme/app_scale.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/command_palette_button.dart';
 import 'package:jva_projecttracker/widgets/notification_bell_button.dart';
@@ -54,8 +55,19 @@ class AppSidebar extends ConsumerWidget {
     final theme = Theme.of(context);
     final userProfile = ref.watch(currentUserProfileProvider).value;
 
+    // Continuous rather than a hard 88/240 toggle: within each mode the
+    // rail's own width still scales with how much room the window actually
+    // has, so a 14" laptop window and a spacious 16"+ desktop — both
+    // "extended" — get a rail sized for their own width rather than an
+    // identical fixed one. Collapsed (icon-only) mode gets the same
+    // treatment across its own, much narrower, band.
+    final windowWidth = MediaQuery.sizeOf(context).width;
+    final width = extended
+        ? AppScale.lerp(windowWidth, 220, 272)
+        : AppScale.lerp(windowWidth, 72, 96);
+
     return Container(
-      width: extended ? 240 : 88,
+      width: width,
       color: theme.colorScheme.surface,
       child: Column(
         children: [

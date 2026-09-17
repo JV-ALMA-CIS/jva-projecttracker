@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -8,7 +11,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:jva_projecttracker/firebase_options.dart';
 import 'package:jva_projecttracker/screens/shared/auth_gate.dart';
+import 'package:jva_projecttracker/services/core/navigation_keys.dart';
 import 'package:jva_projecttracker/services/providers.dart';
+import 'package:jva_projecttracker/services/push_notification_service.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,6 +32,11 @@ Future<void> main() async {
     await initializeDateFormatting(locale.languageCode);
   }
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Must be registered before runApp — this is what lets Android/iOS wake a
+  // headless isolate to run background push handling while the app is fully
+  // terminated. See push_notification_service.dart's doc comment for why
+  // this alone doesn't handle foreground/backgrounded display too.
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   // Web has no local Firestore cache by default, so every screen
   // (e.g. the Project Workspace's Timeline/Deliverables/Risks/Activity
   // subsections, each its own `StreamProvider.family`) re-fetches from the
@@ -47,6 +57,14 @@ Future<void> main() async {
         : const AppleAppAttestProvider(),
   );
   final prefs = await SharedPreferences.getInstance();
+  // Foreground banner + background/terminated tap deep-linking — see
+  // PushNotificationService's doc comment for why each app state needs its
+  // own handling. Safe to start before the first frame renders: its
+  // listeners no-op harmlessly until `rootNavigatorKey` actually has a
+  // mounted Navigator under it.
+  unawaited(
+    PushNotificationService().initialize(navigatorKey: rootNavigatorKey),
+  );
   runApp(
     ProviderScope(
       overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
@@ -65,6 +83,7 @@ class JvaProjectTrackerApp extends ConsumerWidget {
     final locale = ref.watch(appLocaleProvider);
 
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       title: 'JVA Project Tracker',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,

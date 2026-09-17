@@ -220,6 +220,38 @@ extension StrategicReviewRecommendationX on StrategicReviewRecommendation {
 /// except `manual` can be registered as a [DiscoverySource]; whether it has a
 /// working automated adapter yet is a server-side concern
 /// (`functions/index.js`'s `DISCOVERY_ADAPTERS` registry), not modeled here.
+/// Deterministic geography-priority tier assigned at discovery time by
+/// `classifyGeographyPriority` (functions/index.js) before an opportunity is
+/// ever written — Kenya first, then East Africa, then the rest of Africa,
+/// then everything else deemed strategically relevant enough to survive
+/// `isRelevantCandidate`'s pre-filter. `unranked` covers legacy opportunities
+/// written before this field existed, same "null/unranked rather than
+/// guessed" convention as [DiscoverySourceType]/[BuyerTypeFacet].
+enum GeographyPriority {
+  kenya,
+  eastAfrica,
+  africa,
+  internationalStrategic,
+  unranked,
+}
+
+extension GeographyPriorityX on GeographyPriority {
+  String get label => switch (this) {
+    GeographyPriority.kenya => 'Kenya',
+    GeographyPriority.eastAfrica => 'East Africa',
+    GeographyPriority.africa => 'Africa',
+    GeographyPriority.internationalStrategic => 'International',
+    GeographyPriority.unranked => 'Unranked',
+  };
+
+  static GeographyPriority fromString(String value) {
+    return GeographyPriority.values.firstWhere(
+      (g) => g.name == value,
+      orElse: () => GeographyPriority.unranked,
+    );
+  }
+}
+
 enum DiscoverySourceType {
   governmentProcurement,
   developmentOrganization,
@@ -302,9 +334,64 @@ class Opportunity {
   /// never used to gate anything.
   final DateTime? sourceUrlVerifiedAt;
 
+  /// True when [sourceUrl] is not a tender-specific link at all but a
+  /// fallback to the source's own `TenderSource.website` — written by
+  /// `ApiConnector._syncAiSearch` (functions/connectors/apiConnector.js)
+  /// when the grounding cross-check rejected the AI-suggested URL as
+  /// unconfirmed/likely-fabricated, and the source has a known real
+  /// website to point at instead of losing the opportunity entirely. Always
+  /// paired with `sourceUrlVerified: false` (a fallback is never presented
+  /// as confirmed) — this field exists only so the UI can show a distinct
+  /// "fallback" badge rather than treating it identically to an ordinary
+  /// unverified direct link. Defaults to `false`, including for every
+  /// opportunity written before this field existed — same "absence means
+  /// no, not unknown" convention as [sourceUrlVerified].
+  final bool sourceUrlIsFallback;
+
+  /// The match score (`overallMatchScore`, falling back to `fitScorePercent`
+  /// — same precedence `buildNotifications` uses) at the moment a ≥70%
+  /// match-score notification was last durably recorded for this
+  /// opportunity — see [matchNotificationSentAt]. Null until the first time
+  /// that happens. Distinct from the Notification Center's local read-state
+  /// (`NotificationReadController`, device-only shared preferences): this
+  /// field lives on the opportunity document itself, so "was this
+  /// opportunity ever flagged as a strong match" survives a fresh install,
+  /// a different device, or the Notification Center never having been
+  /// opened — the local read-state alone is purely ephemeral.
+  final int? lastNotifiedScore;
+
+  /// When [lastNotifiedScore] was last written — null until the first
+  /// ≥70% match-score notification is durably recorded. Purely
+  /// informational, same convention as [sourceUrlVerifiedAt].
+  final DateTime? matchNotificationSentAt;
+
   final String? client;
   final DateTime? deadline;
   final OpportunityStatus status;
+
+  /// The procuring organization/client issuing the tender — e.g. "KTDA" —
+  /// kept distinct from [client] (which historically doubles as a generic
+  /// "who this opportunity is with" field across every discovery path) so a
+  /// formally procured tender can record its issuing body precisely without
+  /// changing [client]'s existing meaning for non-tender opportunities.
+  /// Null for every opportunity written before this field existed, and for
+  /// any opportunity where a procuring org doesn't apply.
+  final String? procuringOrganization;
+
+  /// The tender's own reference/publication number, entered verbatim as
+  /// published by the procuring organization (e.g. "KTDA/ICT/2026/014") —
+  /// free text since formats vary by issuer and this app must not assume
+  /// any particular tender source's numbering scheme.
+  final String? tenderReferenceNumber;
+
+  /// Technologies/skills the tender explicitly requires (e.g. "Flutter",
+  /// "Firebase", "Cloud Functions") — distinct from [technologyIds] (the
+  /// Company Knowledge Graph's own catalog of technologies JV ALMA CIS has
+  /// experience with, populated by the AI classification pass). This field
+  /// is the tender's stated requirement as written, entered/edited by hand
+  /// on the Opportunity Workspace; nothing here is auto-derived from
+  /// [technologyIds] or vice versa.
+  final List<String> requiredTechnologies;
 
   /// 0-100 estimated fit, produced by the Gemini scoring pipeline.
   final int fitScorePercent;
@@ -322,6 +409,13 @@ class Opportunity {
   // source, since guessing one would be misleading.
   final String? discoverySourceId;
   final DiscoverySourceType? discoverySourceType;
+
+  /// Set by `runOpportunityDiscovery`'s deterministic pre-filter for every
+  /// opportunity discovered via AI search from this point forward — null for
+  /// every opportunity written before this field existed (Tender Source
+  /// connector opportunities included, since geography classification is
+  /// currently only run in the AI-search discovery path).
+  final GeographyPriority? geographyPriority;
 
   // --- Tender Source / Discovery Engine v2 (Milestone 3.8a) ---
   // Written by createOpportunitiesFromCandidates() in Cloud Functions for
@@ -454,9 +548,15 @@ class Opportunity {
     required this.sourceUrl,
     this.sourceUrlVerified = false,
     this.sourceUrlVerifiedAt,
+    this.sourceUrlIsFallback = false,
+    this.lastNotifiedScore,
+    this.matchNotificationSentAt,
     this.client,
     this.deadline,
     this.status = OpportunityStatus.discovered,
+    this.procuringOrganization,
+    this.tenderReferenceNumber,
+    this.requiredTechnologies = const [],
     this.fitScorePercent = 0,
     this.fitReasoning = '',
     this.tags = const [],
@@ -464,6 +564,7 @@ class Opportunity {
     required this.updatedAt,
     this.discoverySourceId,
     this.discoverySourceType,
+    this.geographyPriority,
     this.tenderSourceId,
     this.tenderSourceCategory,
     this.tenderDiscoveryMethod,
@@ -545,10 +646,19 @@ class Opportunity {
       sourceUrl: map['sourceUrl'] as String? ?? '',
       sourceUrlVerified: map['sourceUrlVerified'] as bool? ?? false,
       sourceUrlVerifiedAt: (map['sourceUrlVerifiedAt'] as Timestamp?)?.toDate(),
+      sourceUrlIsFallback: map['sourceUrlIsFallback'] as bool? ?? false,
+      lastNotifiedScore: (map['lastNotifiedScore'] as num?)?.toInt(),
+      matchNotificationSentAt: (map['matchNotificationSentAt'] as Timestamp?)
+          ?.toDate(),
       client: map['client'] as String?,
       deadline: (map['deadline'] as Timestamp?)?.toDate(),
       status: OpportunityStatusX.fromString(
         map['status'] as String? ?? 'discovered',
+      ),
+      procuringOrganization: map['procuringOrganization'] as String?,
+      tenderReferenceNumber: map['tenderReferenceNumber'] as String?,
+      requiredTechnologies: List<String>.from(
+        map['requiredTechnologies'] as List? ?? const [],
       ),
       fitScorePercent: (map['fitScorePercent'] as num?)?.toInt() ?? 0,
       fitReasoning: map['fitReasoning'] as String? ?? '',
@@ -561,6 +671,9 @@ class Opportunity {
           ? DiscoverySourceTypeX.fromString(
               map['discoverySourceType'] as String,
             )
+          : null,
+      geographyPriority: map['geographyPriority'] != null
+          ? GeographyPriorityX.fromString(map['geographyPriority'] as String)
           : null,
       tenderSourceId: map['tenderSourceId'] as String?,
       tenderSourceCategory: map['tenderSourceCategory'] != null
@@ -729,9 +842,17 @@ class Opportunity {
       'sourceUrlVerifiedAt': sourceUrlVerifiedAt != null
           ? Timestamp.fromDate(sourceUrlVerifiedAt!)
           : null,
+      'sourceUrlIsFallback': sourceUrlIsFallback,
+      'lastNotifiedScore': lastNotifiedScore,
+      'matchNotificationSentAt': matchNotificationSentAt != null
+          ? Timestamp.fromDate(matchNotificationSentAt!)
+          : null,
       'client': client,
       'deadline': deadline != null ? Timestamp.fromDate(deadline!) : null,
       'status': status.name,
+      'procuringOrganization': procuringOrganization,
+      'tenderReferenceNumber': tenderReferenceNumber,
+      'requiredTechnologies': requiredTechnologies,
       'fitScorePercent': fitScorePercent,
       'fitReasoning': fitReasoning,
       'tags': tags,
@@ -739,6 +860,7 @@ class Opportunity {
       'updatedAt': Timestamp.fromDate(updatedAt),
       'discoverySourceId': discoverySourceId,
       'discoverySourceType': discoverySourceType?.name,
+      'geographyPriority': geographyPriority?.name,
       'tenderSourceId': tenderSourceId,
       'tenderSourceCategory': tenderSourceCategory?.name,
       'tenderDiscoveryMethod': tenderDiscoveryMethod?.name,

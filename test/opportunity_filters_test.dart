@@ -27,14 +27,17 @@ Opportunity _opportunity({
   String title = 'Rural water tender',
   String? client,
   String sourceUrl = 'https://example.com/tender/1',
+  String description = '',
+  OpportunityStatus status = OpportunityStatus.discovered,
 }) {
   final now = DateTime.utc(2024, 1, 1);
   return Opportunity(
     id: id,
     title: title,
-    description: '',
+    description: description,
     sourceUrl: sourceUrl,
     client: client,
+    status: status,
     deadline: deadline,
     discoveredAt: now,
     updatedAt: now,
@@ -489,6 +492,120 @@ void main() {
       );
 
       expect(result.length, 2);
+    });
+
+    test('stage: evaluation returns only opportunities under evaluation — the '
+        'same composition the Opportunities screen\'s "Under Evaluation" quick '
+        'filter chip relies on', () {
+      final now = DateTime.utc(2024, 6, 15);
+      final underEvaluation = _opportunity(
+        id: 'under-eval',
+        pipelineStage: OpportunityPipelineStage.evaluation,
+      );
+      final discovered = _opportunity(
+        id: 'discovered',
+        pipelineStage: OpportunityPipelineStage.discovered,
+      );
+      final awarded = _opportunity(
+        id: 'awarded',
+        pipelineStage: OpportunityPipelineStage.awarded,
+      );
+
+      final result = filterOpportunities(
+        [underEvaluation, discovered, awarded],
+        const OpportunityBuFilter.all(),
+        const OpportunityFacetFilters(
+          stage: OpportunityPipelineStage.evaluation,
+        ),
+        now: now,
+      );
+
+      expect(result.map((o) => o.id).toList(), ['under-eval']);
+    });
+  });
+
+  group('isOffRegionOpportunity', () {
+    test(
+      'Kenya, Uganda, Tanzania, Rwanda, Burundi (and their cities) are in-region',
+      () {
+        for (final title in [
+          'Kenya road maintenance tender',
+          'Nairobi water supply RFQ',
+          'Uganda agriculture support',
+          'Kampala facility management',
+          'Tanzania renewable energy project',
+          'Dar es Salaam port upgrade',
+          'Rwanda ICT infrastructure',
+          'Kigali construction tender',
+          'Burundi health systems tender',
+          'Bujumbura roofing works',
+        ]) {
+          expect(
+            isOffRegionOpportunity(_opportunity(title: title)),
+            isFalse,
+            reason: '"$title" should be in-region',
+          );
+        }
+      },
+    );
+
+    test('Botswana, Nigeria, Toronto, North Carolina are off-region', () {
+      for (final title in [
+        'US Embassy Botswana roof RFQ',
+        'Nigeria agriculture tender',
+        'Toronto Public Library RFP',
+        'North Carolina facilities contract',
+      ]) {
+        expect(
+          isOffRegionOpportunity(_opportunity(title: title)),
+          isTrue,
+          reason: '"$title" should be off-region',
+        );
+      }
+    });
+
+    test('checks description and client text too, not just title', () {
+      expect(
+        isOffRegionOpportunity(
+          _opportunity(title: 'Roof works', description: 'Located in Kenya'),
+        ),
+        isFalse,
+      );
+      expect(
+        isOffRegionOpportunity(
+          _opportunity(title: 'Roof works', client: 'Government of Rwanda'),
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('isSafeToBulkCleanup', () {
+    test('discovered and reviewing are safe', () {
+      expect(
+        isSafeToBulkCleanup(_opportunity(status: OpportunityStatus.discovered)),
+        isTrue,
+      );
+      expect(
+        isSafeToBulkCleanup(_opportunity(status: OpportunityStatus.reviewing)),
+        isTrue,
+      );
+    });
+
+    test('applied, won, lost, dismissed, archived are not safe', () {
+      for (final status in [
+        OpportunityStatus.applied,
+        OpportunityStatus.won,
+        OpportunityStatus.lost,
+        OpportunityStatus.dismissed,
+        OpportunityStatus.archived,
+      ]) {
+        expect(
+          isSafeToBulkCleanup(_opportunity(status: status)),
+          isFalse,
+          reason: '$status should not be safe to bulk cleanup',
+        );
+      }
     });
   });
 }

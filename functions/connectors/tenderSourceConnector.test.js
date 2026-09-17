@@ -150,7 +150,7 @@ admin.firestore.Timestamp = {
     "checkUrlReachable true when HEAD returns 2xx and the follow-up GET body has no soft-404 phrasing",
     () =>
       withStubbedFetch([200, { status: 200, body: "<html>Tender details...</html>" }], async () => {
-        assert.equal(await checkUrlReachable("https://example.org"), true);
+        assert.equal((await checkUrlReachable("https://example.org")).reachable, true);
       }),
   );
 
@@ -158,7 +158,7 @@ admin.firestore.Timestamp = {
     "checkUrlReachable true when HEAD returns a 3xx redirect and the GET confirms a real page",
     () =>
       withStubbedFetch([301, { status: 200, body: "Tender opportunity details" }], async () => {
-        assert.equal(await checkUrlReachable("https://example.org"), true);
+        assert.equal((await checkUrlReachable("https://example.org")).reachable, true);
       }),
   );
 
@@ -166,7 +166,7 @@ admin.firestore.Timestamp = {
     "checkUrlReachable false when HEAD returns a 404 (fabricated/dead URL) — no GET needed",
     () =>
       withStubbedFetch([404], async () => {
-        assert.equal(await checkUrlReachable("https://example.org"), false);
+        assert.equal((await checkUrlReachable("https://example.org")).reachable, false);
       }),
   );
 
@@ -174,7 +174,7 @@ admin.firestore.Timestamp = {
     "checkUrlReachable falls back to GET when HEAD returns 405, and trusts a clean body",
     () =>
       withStubbedFetch([405, { status: 200, body: "Tender opportunity details" }], async () => {
-        assert.equal(await checkUrlReachable("https://example.org"), true);
+        assert.equal((await checkUrlReachable("https://example.org")).reachable, true);
       }),
   );
 
@@ -184,7 +184,7 @@ admin.firestore.Timestamp = {
       withStubbedFetch(
         [new Error("DNS failure"), new Error("DNS failure")],
         async () => {
-          assert.equal(await checkUrlReachable("https://example.org"), false);
+          assert.equal((await checkUrlReachable("https://example.org")).reachable, false);
         },
       ),
   );
@@ -195,7 +195,7 @@ admin.firestore.Timestamp = {
       withStubbedFetch(
         [new Error("connection reset"), { status: 200, body: "Tender details" }],
         async () => {
-          assert.equal(await checkUrlReachable("https://example.org"), true);
+          assert.equal((await checkUrlReachable("https://example.org")).reachable, true);
         },
       ),
   );
@@ -204,7 +204,7 @@ admin.firestore.Timestamp = {
     "checkUrlReachable false when the GET returns 4xx after an inconclusive HEAD",
     () =>
       withStubbedFetch([405, 404], async () => {
-        assert.equal(await checkUrlReachable("https://example.org"), false);
+        assert.equal((await checkUrlReachable("https://example.org")).reachable, false);
       }),
   );
 
@@ -222,7 +222,7 @@ admin.firestore.Timestamp = {
           },
         ],
         async () => {
-          assert.equal(await checkUrlReachable("https://ke.usembassy.gov/some-fabricated-slug/"), false);
+          assert.equal((await checkUrlReachable("https://ke.usembassy.gov/some-fabricated-slug/")).reachable, false);
         },
       ),
   );
@@ -239,7 +239,7 @@ admin.firestore.Timestamp = {
           },
         ],
         async () => {
-          assert.equal(await checkUrlReachable("https://example.org/dead-link"), false);
+          assert.equal((await checkUrlReachable("https://example.org/dead-link")).reachable, false);
         },
       ),
   );
@@ -257,9 +257,9 @@ admin.firestore.Timestamp = {
         ],
         async () => {
           assert.equal(
-            await checkUrlReachable(
+            (await checkUrlReachable(
               "https://ke.usembassy.gov/wp-content/uploads/sites/115/19KE5026Q0091_Construction-Services.pdf",
-            ),
+            )).reachable,
             false,
           );
         },
@@ -278,7 +278,7 @@ admin.firestore.Timestamp = {
           },
         ],
         async () => {
-          assert.equal(await checkUrlReachable("https://example.org/tender/pr16404577"), true);
+          assert.equal((await checkUrlReachable("https://example.org/tender/pr16404577")).reachable, true);
         },
       ),
   );
@@ -289,7 +289,7 @@ admin.firestore.Timestamp = {
       withStubbedFetch(
         [200, { status: 200, bodyReadFails: true }],
         async () => {
-          assert.equal(await checkUrlReachable("https://example.org"), true);
+          assert.equal((await checkUrlReachable("https://example.org")).reachable, true);
         },
       ),
   );
@@ -313,7 +313,7 @@ admin.firestore.Timestamp = {
               "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AXQE123",
           },
         ],
-        { reachabilityCheck: async () => true },
+        { reachabilityCheck: async () => ({ reachable: true, finalUrl: null }) },
       );
 
       assert.equal(result.created, 1);
@@ -331,7 +331,7 @@ admin.firestore.Timestamp = {
         db,
         source,
         [{ title: "Real tender", sourceUrl: "https://example.org/tender/1" }],
-        { reachabilityCheck: async () => true },
+        { reachabilityCheck: async () => ({ reachable: true, finalUrl: null }) },
       );
 
       assert.equal(result.created, 1);
@@ -348,7 +348,7 @@ admin.firestore.Timestamp = {
         db,
         source,
         [{ title: "Real tender", sourceUrl: "https://example.org/tender/1" }],
-        { reachabilityCheck: async () => true },
+        { reachabilityCheck: async () => ({ reachable: true, finalUrl: null }) },
       );
 
       assert.equal(db.written[0].sourceUrlVerified, true);
@@ -371,13 +371,219 @@ admin.firestore.Timestamp = {
             sourceUrl: "https://tenderskenya.co.ke/tenders/fake-1",
           },
         ],
-        { reachabilityCheck: async () => false },
+        { reachabilityCheck: async () => ({ reachable: false, finalUrl: null }) },
       );
 
       assert.equal(result.created, 1);
       assert.equal(db.written.length, 1);
       assert.equal(db.written[0].sourceUrlVerified, false);
       assert.equal(db.written[0].sourceUrlVerifiedAt, null);
+    },
+  );
+
+  await asyncTest(
+    "createOpportunitiesFromCandidates stores the reachability check's finalUrl instead of the original redirect-chained sourceUrl",
+    async () => {
+      const db = fakeDb();
+      const source = { id: "src-1", category: "developmentPartner", discoveryMethod: "api" };
+      await createOpportunitiesFromCandidates(
+        db,
+        source,
+        [{ title: "Real tender", sourceUrl: "https://example.org/redirect/1" }],
+        {
+          reachabilityCheck: async () => ({
+            reachable: true,
+            finalUrl: "https://example.org/tender/final-1",
+          }),
+        },
+      );
+
+      assert.equal(db.written[0].sourceUrl, "https://example.org/tender/final-1");
+    },
+  );
+
+  await asyncTest(
+    "createOpportunitiesFromCandidates keeps the original sourceUrl when the reachability check is unreachable",
+    async () => {
+      const db = fakeDb();
+      const source = { id: "src-1", category: "developmentPartner", discoveryMethod: "api" };
+      await createOpportunitiesFromCandidates(
+        db,
+        source,
+        [{ title: "Fabricated tender", sourceUrl: "https://example.org/tender/1" }],
+        { reachabilityCheck: async () => ({ reachable: false, finalUrl: null }) },
+      );
+
+      assert.equal(db.written[0].sourceUrl, "https://example.org/tender/1");
+    },
+  );
+
+  await asyncTest(
+    "createOpportunitiesFromCandidates skips the reachability check entirely for a sourceUrlIsFallback candidate",
+    async () => {
+      const db = fakeDb();
+      const source = { id: "src-1", category: "developmentPartner", discoveryMethod: "api" };
+      let reachabilityCheckCalls = 0;
+
+      await createOpportunitiesFromCandidates(
+        db,
+        source,
+        [
+          {
+            title: "Dropped-by-grounding tender",
+            sourceUrl: "https://example.org",
+            sourceUrlIsFallback: true,
+          },
+        ],
+        {
+          reachabilityCheck: async () => {
+            reachabilityCheckCalls += 1;
+            return { reachable: true, finalUrl: "https://example.org/somewhere-else" };
+          },
+        },
+      );
+
+      assert.equal(reachabilityCheckCalls, 0);
+    },
+  );
+
+  await asyncTest(
+    "createOpportunitiesFromCandidates stores a sourceUrlIsFallback candidate's sourceUrl as-is and always marks it unverified",
+    async () => {
+      const db = fakeDb();
+      const source = { id: "src-1", category: "developmentPartner", discoveryMethod: "api" };
+
+      await createOpportunitiesFromCandidates(
+        db,
+        source,
+        [
+          {
+            title: "Dropped-by-grounding tender",
+            sourceUrl: "https://example.org",
+            sourceUrlIsFallback: true,
+          },
+        ],
+        { reachabilityCheck: async () => ({ reachable: true, finalUrl: "https://example.org/x" }) },
+      );
+
+      assert.equal(db.written.length, 1);
+      assert.equal(db.written[0].sourceUrl, "https://example.org");
+      assert.equal(db.written[0].sourceUrlVerified, false);
+      assert.equal(db.written[0].sourceUrlVerifiedAt, null);
+      assert.equal(db.written[0].sourceUrlIsFallback, true);
+    },
+  );
+
+  await asyncTest(
+    "createOpportunitiesFromCandidates stores sourceUrlIsFallback: false for an ordinary (non-fallback) candidate",
+    async () => {
+      const db = fakeDb();
+      const source = { id: "src-1", category: "developmentPartner", discoveryMethod: "api" };
+
+      await createOpportunitiesFromCandidates(
+        db,
+        source,
+        [{ title: "Real tender", sourceUrl: "https://example.org/tender/1" }],
+        { reachabilityCheck: async () => ({ reachable: true, finalUrl: null }) },
+      );
+
+      assert.equal(db.written[0].sourceUrlIsFallback, false);
+    },
+  );
+
+  await asyncTest(
+    "createOpportunitiesFromCandidates returns verifiedCount/unverifiedCount reflecting each written candidate's reachability",
+    async () => {
+      const db = fakeDb();
+      const source = { id: "src-1", category: "developmentPartner", discoveryMethod: "api" };
+      let call = 0;
+
+      const result = await createOpportunitiesFromCandidates(
+        db,
+        source,
+        [
+          { title: "Verified tender", sourceUrl: "https://example.org/tender/1" },
+          { title: "Unverified tender", sourceUrl: "https://example.org/tender/2" },
+          { title: "Another verified tender", sourceUrl: "https://example.org/tender/3" },
+        ],
+        {
+          reachabilityCheck: async () => {
+            call += 1;
+            // Second candidate is unreachable, the other two are reachable.
+            return call === 2
+              ? { reachable: false, finalUrl: null }
+              : { reachable: true, finalUrl: null };
+          },
+        },
+      );
+
+      assert.equal(result.created, 3);
+      assert.equal(result.verifiedCount, 2);
+      assert.equal(result.unverifiedCount, 1);
+    },
+  );
+
+  await asyncTest(
+    "createOpportunitiesFromCandidates counts a sourceUrlIsFallback candidate toward unverifiedCount, never verifiedCount",
+    async () => {
+      const db = fakeDb();
+      const source = { id: "src-1", category: "developmentPartner", discoveryMethod: "api" };
+
+      const result = await createOpportunitiesFromCandidates(
+        db,
+        source,
+        [
+          {
+            title: "Fallback tender",
+            sourceUrl: "https://example.org",
+            sourceUrlIsFallback: true,
+          },
+        ],
+        { reachabilityCheck: async () => ({ reachable: true, finalUrl: "https://example.org/x" }) },
+      );
+
+      assert.equal(result.verifiedCount, 0);
+      assert.equal(result.unverifiedCount, 1);
+    },
+  );
+
+  await asyncTest(
+    "createOpportunitiesFromCandidates persists geographyPriority when the candidate carries one",
+    async () => {
+      const db = fakeDb();
+      const source = { id: "src-1", category: "governmentAgency", discoveryMethod: "api" };
+
+      await createOpportunitiesFromCandidates(
+        db,
+        source,
+        [
+          {
+            title: "Tender in Nairobi, Kenya",
+            sourceUrl: "https://example.org/tender/1",
+            geographyPriority: "kenya",
+          },
+        ],
+        { reachabilityCheck: async () => ({ reachable: true, finalUrl: null }) },
+      );
+
+      assert.equal(db.written[0].geographyPriority, "kenya");
+    },
+  );
+
+  await asyncTest(
+    "createOpportunitiesFromCandidates omits geographyPriority when the candidate doesn't carry one (e.g. restJson mode)",
+    async () => {
+      const db = fakeDb();
+      const source = { id: "src-1", category: "governmentAgency", discoveryMethod: "restJson" };
+
+      await createOpportunitiesFromCandidates(
+        db,
+        source,
+        [{ title: "Tender", sourceUrl: "https://example.org/tender/1" }],
+        { reachabilityCheck: async () => ({ reachable: true, finalUrl: null }) },
+      );
+
+      assert.equal("geographyPriority" in db.written[0], false);
     },
   );
 

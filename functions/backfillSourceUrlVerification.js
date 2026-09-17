@@ -59,12 +59,16 @@ const backfillSourceUrlVerification = onCall(
       if (!sourceUrl) continue;
 
       try {
-        const sourceUrlVerified = await checkUrlReachable(sourceUrl);
+        const { reachable: sourceUrlVerified, finalUrl } =
+          await checkUrlReachable(sourceUrl);
         await doc.ref.update({
           sourceUrlVerified,
           sourceUrlVerifiedAt: sourceUrlVerified
             ? admin.firestore.Timestamp.now()
             : null,
+          ...(sourceUrlVerified && finalUrl && finalUrl !== sourceUrl
+            ? { sourceUrl: finalUrl }
+            : {}),
         });
         checked += 1;
       } catch (e) {

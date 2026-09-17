@@ -283,4 +283,119 @@ void main() {
       expect(find.text(_strings.openSourceDashboardButton), findsNothing);
     },
   );
+
+  testWidgets('shows the fallback badge when sourceUrlIsFallback is true — the '
+      'grounding cross-check rejected the AI-suggested URL and this points '
+      'at the TenderSource\'s website instead of a tender-specific page', (
+    tester,
+  ) async {
+    final firestore = FakeFirebaseFirestore();
+    final now = DateTime.utc(2024, 1, 1);
+    await firestore.collection('opportunities').add({
+      'title': 'Fallback tender',
+      'description': 'Grounding cross-check rejected the suggested URL',
+      'sourceUrl': 'https://example.gov',
+      'sourceUrlVerified': false,
+      'sourceUrlIsFallback': true,
+      'status': 'discovered',
+      'fitScorePercent': 60,
+      'discoveredAt': now,
+      'updatedAt': now,
+    });
+
+    await _pumpScreen(tester, firestore);
+    await tester.tap(find.text('Fallback tender'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(_strings.sourceUrlFallbackBadgeLabel), findsOneWidget);
+  });
+
+  testWidgets(
+    'does not show the fallback badge for an ordinary unverified opportunity',
+    (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      final now = DateTime.utc(2024, 1, 1);
+      await firestore.collection('opportunities').add({
+        'title': 'Ordinary unverified tender',
+        'description': 'Just unverified, not a fallback',
+        'sourceUrl': 'https://example.com/tender/unverified',
+        'sourceUrlVerified': false,
+        'status': 'discovered',
+        'fitScorePercent': 60,
+        'discoveredAt': now,
+        'updatedAt': now,
+      });
+
+      await _pumpScreen(tester, firestore);
+      await tester.tap(find.text('Ordinary unverified tender'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_strings.sourceUrlFallbackBadgeLabel), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'the Evaluation tab shows only opportunities in the evaluation pipeline stage',
+    (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      final now = DateTime.utc(2024, 1, 1);
+      await firestore.collection('opportunities').add({
+        'title': 'KTDA ICT infrastructure tender',
+        'description': 'Upgrade of core network infrastructure',
+        'sourceUrl': 'https://example.com/tender/ktda-1',
+        'status': 'reviewing',
+        'fitScorePercent': 80,
+        'discoveredAt': now,
+        'updatedAt': now,
+        'pipelineStage': 'evaluation',
+        'procuringOrganization': 'KTDA',
+        'tenderReferenceNumber': 'KTDA/ICT/2026/014',
+      });
+      await firestore.collection('opportunities').add({
+        'title': 'Road rehabilitation tender',
+        'description': 'Rehabilitate 40km of rural road',
+        'sourceUrl': 'https://example.com/tender/road-1',
+        'status': 'discovered',
+        'fitScorePercent': 85,
+        'discoveredAt': now,
+        'updatedAt': now,
+        'pipelineStage': 'discovered',
+      });
+
+      await _pumpScreen(tester, firestore);
+
+      await tester.tap(find.widgetWithText(Tab, _strings.evaluationTabLabel));
+      await tester.pumpAndSettle();
+
+      expect(find.text('KTDA ICT infrastructure tender'), findsOneWidget);
+      expect(find.text('Road rehabilitation tender'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'the Evaluation tab shows the empty state when nothing is under evaluation',
+    (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      final now = DateTime.utc(2024, 1, 1);
+      await firestore.collection('opportunities').add({
+        'title': 'Road rehabilitation tender',
+        'description': 'Rehabilitate 40km of rural road',
+        'sourceUrl': 'https://example.com/tender/road-1',
+        'status': 'discovered',
+        'fitScorePercent': 85,
+        'discoveredAt': now,
+        'updatedAt': now,
+      });
+
+      await _pumpScreen(tester, firestore);
+
+      await tester.tap(find.widgetWithText(Tab, _strings.evaluationTabLabel));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(_strings.noOpportunitiesUnderEvaluation),
+        findsOneWidget,
+      );
+    },
+  );
 }

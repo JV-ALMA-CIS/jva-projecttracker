@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- FCM foundation: required on Android 13+ (API 33) for any
+         notification, including a future push. The plugin's default
+         FirebaseMessagingService is auto-registered by FlutterFire's Gradle
+         integration — no manual <service> entry needed here. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="jva_projecttracker"
         android:name="${applicationName}"
@@ -30,6 +35,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- FCM foundation: default notification channel a future push will
+             be delivered on. No channel resource exists yet (no push is
+             actually sent today) — this is the minimal entry FCM's Android
+             SDK expects to find; a real channel definition/icon can be
+             added once real sends begin. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="general" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

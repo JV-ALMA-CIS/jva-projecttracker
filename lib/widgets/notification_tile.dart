@@ -25,9 +25,16 @@ class NotificationTile extends ConsumerWidget {
       notification.priority,
     );
 
-    final subtitle = notification.type == NotificationType.recommendation
-        ? notification.body ?? ''
-        : _deadlineText(strings, notification.daysUntilDeadline ?? 0);
+    final subtitle = switch (notification.type) {
+      NotificationType.recommendation => notification.body ?? '',
+      NotificationType.deadline => _deadlineText(
+        strings,
+        notification.daysUntilDeadline ?? 0,
+      ),
+      NotificationType.matchScore => strings.matchScoreNotificationSubtitle(
+        notification.matchScorePercent ?? 0,
+      ),
+    };
 
     return Card(
       child: ListTile(
@@ -40,9 +47,11 @@ class NotificationTile extends ConsumerWidget {
         leading: CircleAvatar(
           backgroundColor: background,
           child: Icon(
-            notification.type == NotificationType.recommendation
-                ? Icons.auto_awesome_outlined
-                : Icons.schedule_outlined,
+            switch (notification.type) {
+              NotificationType.recommendation => Icons.auto_awesome_outlined,
+              NotificationType.deadline => Icons.schedule_outlined,
+              NotificationType.matchScore => Icons.trending_up_outlined,
+            },
             color: foreground,
             size: 20,
           ),

@@ -138,7 +138,20 @@ class SettingsScreen extends ConsumerWidget {
                     const SizedBox(height: 16),
                   ],
                   OutlinedButton.icon(
-                    onPressed: () => ref.read(authServiceProvider).signOut(),
+                    onPressed: () async {
+                      // Must run before signOut(): once signed out, the
+                      // fcmTokens subcollection this device's token lives
+                      // under is no longer readable/writable by this client
+                      // (firestore.rules scopes it to the owning uid). See
+                      // FcmTokenService.deleteCurrentToken's doc comment for
+                      // why leaving it behind matters on a shared device.
+                      if (user != null) {
+                        await ref
+                            .read(fcmTokenServiceProvider)
+                            .deleteCurrentToken(user.uid);
+                      }
+                      await ref.read(authServiceProvider).signOut();
+                    },
                     icon: const Icon(Icons.logout),
                     label: Text(strings.signOutButton),
                   ),

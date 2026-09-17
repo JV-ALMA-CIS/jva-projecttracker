@@ -579,8 +579,18 @@ class AppStrings {
   String get unverifiedSourceLinkTooltip => _it
       ? 'Questo link non è stato confermato funzionante — l\'IA potrebbe averlo generato in modo errato. Apri con cautela.'
       : 'This link hasn\'t been confirmed to work — it may have been generated incorrectly by AI. Open with caution.';
+  String get sourceUrlFallbackBadgeLabel => _it ? 'Fallback' : 'Fallback';
+  String get sourceUrlFallbackBadgeTooltip => _it
+      ? 'L\'IA non ha potuto confermare un link diretto al bando — questo apre invece il sito della fonte.'
+      : 'The AI couldn\'t confirm a direct tender link — this opens the source\'s website instead.';
   String get markLinkVerifiedButton =>
       _it ? 'Segna come verificato' : 'Mark as verified';
+  String get unverifiedLinkDialogTitle =>
+      _it ? 'Link non verificato' : 'Unverified link';
+  String get unverifiedLinkDialogMessage => _it
+      ? 'Questo link non è stato verificato e potrebbe essere non funzionante. Aprire comunque?'
+      : 'This link could not be verified and may be broken. Open anyway?';
+  String get openAnywayButton => _it ? 'Apri comunque' : 'Open anyway';
   String get linkMarkedVerifiedMessage =>
       _it ? 'Link segnato come verificato' : 'Link marked as verified';
   String get openSourceDashboardButton =>
@@ -594,6 +604,23 @@ class AppStrings {
   String get openWorkspaceButton =>
       _it ? 'Apri area di lavoro' : 'Open workspace';
   String get aiOverviewSectionTitle => _it ? 'Panoramica IA' : 'AI overview';
+  String get moveToUnderEvaluationButton =>
+      _it ? 'Sposta in valutazione' : 'Move to Under Evaluation';
+  String get underEvaluationFilterLabel =>
+      _it ? 'In valutazione' : 'Under Evaluation';
+  String get evaluationTabLabel => _it ? 'Valutazione' : 'Evaluation';
+  String get noOpportunitiesUnderEvaluation => _it
+      ? 'Nessuna opportunità in valutazione'
+      : 'No opportunities under evaluation';
+  String get fieldProcuringOrganization =>
+      _it ? 'Ente appaltante' : 'Procuring organization';
+  String get fieldTenderReferenceNumber =>
+      _it ? 'Numero di riferimento della gara' : 'Tender reference number';
+  String get fieldRequiredTechnologies => _it
+      ? 'Tecnologie richieste (separate da virgola)'
+      : 'Required technologies (comma-separated)';
+  String get tenderDetailsSectionTitle =>
+      _it ? 'Dettagli della gara' : 'Tender details';
 
   // Opportunities — Business Unit navigation & faceted filters (Phase 2)
   String get searchOpportunitiesHint =>
@@ -663,6 +690,12 @@ class AppStrings {
       ? 'Trova opportunità il cui titolo, cliente o URL contiene questa parola chiave (es. il nome di una fonte gara eliminata) e le elimina in blocco. Utile per ripulire opportunità rimaste orfane da una fonte già eliminata.'
       : 'Finds opportunities whose title, client, or URL contains this keyword (e.g. a deleted tender source\'s name) and deletes them in bulk. Useful for cleaning up opportunities orphaned by an already-deleted source.';
   String get bulkCleanupKeywordFieldLabel => _it ? 'Parola chiave' : 'Keyword';
+  String get bulkCleanupOffRegionLabel => _it
+      ? 'Solo fuori regione (non Kenya/Uganda/Tanzania/Ruanda/Burundi)'
+      : 'Off-region only (not Kenya/Uganda/Tanzania/Rwanda/Burundi)';
+  String get bulkCleanupOffRegionCaption => _it
+      ? 'Trova opportunità ancora in fase di scoperta/revisione il cui testo non menziona Kenya, Uganda, Tanzania, Ruanda o Burundi — utile per ripulire vecchie opportunità scoperte prima del filtro geografico. Le opportunità già in corso di lavorazione sono protette.'
+      : 'Finds opportunities still in Discovered/Reviewing status whose text names none of Kenya, Uganda, Tanzania, Rwanda, or Burundi — useful for cleaning up old opportunities discovered before the geography filter existed. Opportunities already being worked on are protected.';
   String get bulkCleanupSelectAllLabel =>
       _it ? 'Seleziona tutte le opportunità' : 'Select all opportunities';
   String get bulkCleanupSelectAllCaption => _it
@@ -1016,6 +1049,10 @@ class AppStrings {
       _it ? 'Raccomandazioni' : 'Recommendations';
   String get upcomingDeadlinesGroupLabel =>
       _it ? 'Scadenze in arrivo' : 'Upcoming deadlines';
+  String get strongMatchesGroupLabel =>
+      _it ? 'Forti corrispondenze' : 'Strong matches';
+  String matchScoreNotificationSubtitle(int percent) =>
+      _it ? 'Punteggio di corrispondenza: $percent%' : 'Match score: $percent%';
   String deadlineOverdueLabel(int daysAgo) => _it
       ? 'Scadenza superata da ${daysAgo}g'
       : 'Deadline passed ${daysAgo}d ago';

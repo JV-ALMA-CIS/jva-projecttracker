@@ -8,6 +8,13 @@ const {
   isGroundingRedirectStub,
   checkUrlReachable,
 } = require("./connectors/tenderSourceConnector");
+const {
+  isRelevantCandidate,
+  isAllowedCountry,
+  classifyGeographyPriority,
+  GEOGRAPHY_PRIORITY_RANK,
+} = require("./opportunityRelevance");
+const { applyGroundedUrlCrossCheck } = require("./lib/groundedUrlValidation");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -129,15 +136,26 @@ opportunities${query ? ` related to: ${query}` : " that this company is realisti
 For each one, estimate a fit score (0-100) for how well this company's stack and
 experience match the opportunity, and briefly justify the score.
 
+GEOGRAPHY — only include opportunities located in Kenya, Uganda, Tanzania,
+Rwanda, or Burundi. Do not include opportunities from any other country
+(e.g. Canada, the UK, the US, or elsewhere in Africa) even if they otherwise
+look like a strong match — they will be discarded regardless of fit score,
+so do not waste a slot on one.
+
 CRITICAL — "sourceUrl" must be a direct, real, publicly loadable link to the
 actual tender/opportunity page as it appears in the address bar of the site
 that published it — the exact URL a person could paste into a browser and
-land on that tender. NEVER return a Google Search redirect/citation link
-(any URL on a "vertexaisearch.cloud.google.com" or similar Google-hosted
-redirect domain) — those are internal citation artifacts, not something a
-person can open later, and are worthless here. If you cannot determine the
-real, direct URL for an opportunity, omit that opportunity entirely rather
-than guessing or substituting a search-result link.
+land on that tender. Copy this URL EXACTLY as it appears in your search
+results/grounding data — character for character. NEVER type out, guess,
+reconstruct, or paraphrase a URL from a page's title even if you are
+confident you know its slug or numbering scheme; if you did not literally
+see the URL in your search results, you do not have it. NEVER return a
+Google Search redirect/citation link (any URL on a
+"vertexaisearch.cloud.google.com" or similar Google-hosted redirect domain)
+— those are internal citation artifacts, not something a person can open
+later, and are worthless here. If you cannot determine the real, direct URL
+for an opportunity, omit that opportunity entirely rather than guessing or
+substituting a search-result link.
 
 Return ONLY a JSON array, each item shaped as:
 {
@@ -150,7 +168,10 @@ Return ONLY a JSON array, each item shaped as:
   "fitScorePercent": number (0-100),
   "fitReasoning": string
 }
-No commentary, no markdown fences.`;
+If none of the opportunities you found have a real, verifiable sourceUrl,
+return an empty JSON array: []
+Return ONLY the JSON array — no commentary, no markdown fences, no
+explanation before or after it, even when the array is empty.`;
 
   const response = await ai.models.generateContent({
     model: GEMINI_MODEL,
@@ -163,14 +184,64 @@ No commentary, no markdown fences.`;
   try {
     candidates = extractJson(text);
   } catch (e) {
-    logger.error("runOpportunityDiscovery: failed to parse model output", e, text);
-    throw new HttpsError("internal", "Model did not return parseable JSON");
+    // The stricter "never guess a URL, omit the opportunity instead"
+    // instruction above means the model legitimately has nothing to report
+    // more often than before — it sometimes explains that in prose ("no
+    // verifiable opportunities found...") instead of returning `[]`, which
+    // extractJson treats as a parse failure. Since an empty result is an
+    // expected, non-error outcome here, log it for visibility and continue
+    // with zero candidates rather than failing the whole run (same handling
+    // ApiConnector._syncAiSearch already uses for the identical case).
+    logger.warn(
+      "runOpportunityDiscovery: model returned no parseable JSON — treating as zero candidates",
+      e,
+      text,
+    );
+    candidates = [];
   }
   if (!Array.isArray(candidates)) candidates = [];
 
+  // Exact-URL grounding cross-check — drops any candidate whose sourceUrl
+  // isn't backed by a page Google Search grounding actually retrieved (fails
+  // closed when grounding metadata is present but unresolvable, never falls
+  // back to a domain-only match). Same shared logic apiConnector.js's
+  // TenderSource-based AI search already uses — see
+  // lib/groundedUrlValidation.js for why this must run before the
+  // relevance/geography pre-filter below, not after: a fabricated URL must
+  // never survive regardless of how relevant its title looks.
+  const candidatesFromModel = candidates.length;
+  const { kept: groundedCandidates } = await applyGroundedUrlCrossCheck(
+    candidates,
+    response,
+    { logPrefix: "runOpportunityDiscovery" },
+  );
+  candidates = groundedCandidates;
+  const groundingDroppedCount = candidatesFromModel - candidates.length;
+
+  // Deterministic pre-filter (expired/malformed/non-tender content) before
+  // any candidate is written — see isRelevantCandidate. HARD geography gate:
+  // isAllowedCountry drops anything outside Kenya/Uganda/Tanzania/Rwanda/
+  // Burundi regardless of fit score — a 90%+ fit score from Botswana,
+  // Toronto, North Carolina, etc. must still be discarded. Survivors are
+  // then sorted Kenya -> the other four East African countries so
+  // higher-priority opportunities are created (and thus surfaced) first
+  // within this run; see classifyGeographyPriority.
+  const beforeGeographyCount = candidates.filter((c) => isRelevantCandidate(c)).length;
+  const relevantCandidates = candidates
+    .filter((c) => isRelevantCandidate(c) && isAllowedCountry(c))
+    .map((c) => ({ candidate: c, geographyPriority: classifyGeographyPriority(c) }))
+    .sort(
+      (a, b) =>
+        GEOGRAPHY_PRIORITY_RANK[a.geographyPriority] -
+        GEOGRAPHY_PRIORITY_RANK[b.geographyPriority],
+    );
+  const relevanceDroppedCount = candidates.length - beforeGeographyCount;
+  const geographyDroppedCount = beforeGeographyCount - relevantCandidates.length;
+
   let created = 0;
-  for (const c of candidates) {
-    if (!c.sourceUrl || !c.title) continue;
+  let verifiedCount = 0;
+  let unverifiedCount = 0;
+  for (const { candidate: c, geographyPriority } of relevantCandidates) {
     // Same fabrication risk as ApiConnector._syncAiSearch (this uses the
     // identical Gemini + Google Search grounding technique) — drop any
     // candidate whose sourceUrl is a Google grounding-redirect citation
@@ -185,26 +256,45 @@ No commentary, no markdown fences.`;
     if (!existing.empty) continue;
 
     const now = admin.firestore.Timestamp.now();
-    const sourceUrlVerified = await checkUrlReachable(c.sourceUrl);
+    const { reachable: sourceUrlVerified, finalUrl } = await checkUrlReachable(c.sourceUrl);
+    const sourceUrl = sourceUrlVerified && finalUrl ? finalUrl : c.sourceUrl;
+    if (sourceUrlVerified) {
+      verifiedCount += 1;
+    } else {
+      unverifiedCount += 1;
+    }
     await db.collection("opportunities").add({
       title: c.title,
       description: c.description || "",
-      sourceUrl: c.sourceUrl,
+      sourceUrl,
       sourceUrlVerified,
       sourceUrlVerifiedAt: sourceUrlVerified ? now : null,
+      sourceUrlIsFallback: false,
       client: c.client || null,
       deadline: c.deadline ? admin.firestore.Timestamp.fromDate(new Date(c.deadline)) : null,
       status: "discovered",
       fitScorePercent: Math.max(0, Math.min(100, Math.round(c.fitScorePercent || 0))),
       fitReasoning: c.fitReasoning || "",
       tags: Array.isArray(c.tags) ? c.tags : [],
+      geographyPriority,
       discoveredAt: now,
       updatedAt: now,
     });
     created += 1;
   }
 
-  logger.info(`runOpportunityDiscovery: created ${created} of ${candidates.length} candidates`);
+  // One summary line per run showing where candidates were lost at each
+  // stage — grounding cross-check, relevance/geography pre-filter, and
+  // reachability verification — so a run that "found nothing" or "found
+  // mostly unverified links" is diagnosable from Cloud Logging alone,
+  // without having to correlate several separate log lines.
+  logger.info(
+    `runOpportunityDiscovery: ${candidatesFromModel} from model -> ` +
+      `${groundingDroppedCount} dropped (grounding), ` +
+      `${relevanceDroppedCount} dropped (relevance), ` +
+      `${geographyDroppedCount} dropped (geography — outside Kenya/Uganda/Tanzania/Rwanda/Burundi), ` +
+      `${created} created (${verifiedCount} verified, ${unverifiedCount} unverified)`,
+  );
   return created;
 }
 
@@ -1327,6 +1417,9 @@ exports.seedCompanyBusinessUnits = seedCompanyBusinessUnits;
 
 const { backfillOpportunityBusinessUnits } = require("./backfillOpportunityBusinessUnits");
 exports.backfillOpportunityBusinessUnits = backfillOpportunityBusinessUnits;
+
+const { cleanupOffRegionOpportunities } = require("./cleanupOffRegionOpportunities");
+exports.cleanupOffRegionOpportunities = cleanupOffRegionOpportunities;
 
 // ====================================================================
 // Milestone 4.2 — AI Proposal Generation Engine
@@ -3267,3 +3360,12 @@ exports.generateSubmissionReview = onCall({ timeoutSeconds: 120 }, async (reques
     reviewedAt: now.toDate().toISOString(),
   };
 });
+
+// ====================================================================
+// FCM Foundation — ≥70% match-score push trigger point (send not yet
+// implemented; see matchScorePushNotification.js)
+// ====================================================================
+const {
+  onOpportunityMatchScoreUpdated,
+} = require("./matchScorePushNotification");
+exports.onOpportunityMatchScoreUpdated = onOpportunityMatchScoreUpdated;

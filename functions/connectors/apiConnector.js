@@ -11,7 +11,22 @@ const {
   isQuotaError,
   withQuotaRetry,
 } = require("../lib/aiHelpers");
+const { applyGroundedUrlCrossCheck } = require("../lib/groundedUrlValidation");
+const {
+  isAllowedCountry,
+  classifyGeographyPriority,
+} = require("../opportunityRelevance");
 const { resolveSecret } = require("../lib/secrets");
+
+/**
+ * How many grounding-cross-check-rejected candidates from one sync run may
+ * fall back to `source.website` (see `_syncAiSearch`'s cross-check block).
+ * Capped so a source whose grounding is broadly failing this run doesn't
+ * flood the pipeline with several generic homepage-link opportunities —
+ * one or two is a useful "at least point them somewhere real" fallback,
+ * many is noise.
+ */
+const MAX_WEBSITE_FALLBACKS_PER_RUN = 3;
 
 /** Category -> prompt-targeting phrase, used only in `connectorConfig.mode === "aiSearch"`. */
 const CATEGORY_TARGETING = {
@@ -25,68 +40,6 @@ const CATEGORY_TARGETING = {
   customEnterprise: "the organization's own tenders and RFPs",
 };
 
-/**
- * Resolves one Gemini grounding-chunk redirect URI to the real, final URL it
- * points to — this is the actual page Google Search grounding retrieved.
- * Used to validate candidates path-for-path: a candidate whose sourceUrl
- * merely shares a hostname with a grounded citation (e.g. the right domain
- * but a model-invented path) is exactly the failure mode a domain-only
- * check would miss. Any failure (timeout, non-2xx, DNS issue) just means
- * this one citation doesn't contribute a URL — never thrown, since one bad
- * citation must not abort the whole cross-check.
- */
-async function resolveGroundingUrl(redirectUri, { timeoutMs = 5000 } = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(redirectUri, {
-      method: "HEAD",
-      redirect: "follow",
-      signal: controller.signal,
-    });
-    // A HEAD 4xx/5xx (or one silently rejected, i.e. no final `res.url`)
-    // doesn't necessarily mean the redirect is dead — plenty of real sites
-    // (WordPress/government sites among them) reject HEAD outright while
-    // answering GET normally. Falling through to a GET attempt here
-    // mirrors the same HEAD-then-GET pattern `checkUrlReachable`
-    // (tenderSourceConnector.js) already uses, and matters a lot here:
-    // this function silently failing to resolve real citations is what
-    // let fabricated candidate URLs slip through the exact-match check
-    // undetected in production.
-    if (res.url && res.status < 400) return res.url;
-  } catch {
-    // Fall through to GET.
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  const getController = new AbortController();
-  const getTimeout = setTimeout(() => getController.abort(), timeoutMs);
-  try {
-    const res = await fetch(redirectUri, {
-      method: "GET",
-      redirect: "follow",
-      signal: getController.signal,
-    });
-    // Status must be checked here too, same as the HEAD attempt above —
-    // a citation redirect can legitimately resolve (no network error, a
-    // real res.url) to a page that is itself dead (e.g. Google's grounding
-    // tool citing a stale link that now 404s on the source's own site, the
-    // real cause of a "sam.gov/404" sourceUrl reaching production: the
-    // redirect resolved cleanly, so its status was never checked, and the
-    // dead page's own URL was trusted as a verified match). Returning it
-    // unconditionally here defeats the entire point of exact-URL grounding
-    // validation — an unreachable resolved URL must not be treated as
-    // confirmation of anything.
-    if (res.url && res.status < 400) return res.url;
-    return null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(getTimeout);
-  }
-}
-
 function safeHostname(url) {
   if (typeof url !== "string") return null;
   try {
@@ -97,65 +50,136 @@ function safeHostname(url) {
 }
 
 /**
- * Returns the set of real pages Gemini's Google Search grounding tool
- * actually retrieved for this response — i.e. what the model genuinely saw,
- * as opposed to what it wrote in its free-text answer — keyed by URL with
- * the trailing slash normalized away, by resolving every grounding-chunk
- * redirect once. This is what candidates' `sourceUrl` values get
- * matched/replaced against in `_syncAiSearch`, so a candidate whose path was
- * invented by the model (right domain, wrong page) is caught even though a
- * domain-only check would miss it.
- *
- * ASSUMPTION FLAGGED FOR REVIEW: this reads
- * `response.candidates[0].groundingMetadata.groundingChunks[].web.uri`,
- * the standard Gemini API shape when using the `googleSearch` tool
- * (config.tools in `_syncAiSearch` below). `genAiClient()` (lib/aiHelpers.js)
- * wasn't available to confirm it passes the raw SDK response through
- * unchanged rather than reshaping it — worth a quick check against that
- * file, or just a console.log of one real `response` object, before
- * relying on this in production. If the shape doesn't match, `available`
- * below will always be false and the cross-check will silently skip
- * (logged as a warning) rather than break anything.
- *
- * Return shape distinguishes two very different "nothing to check against"
- * situations, which must NOT be handled the same way by the caller:
- *  - `{ available: false }` — no grounding metadata at all (missing
- *    groundingChunks, or a shape mismatch per the ASSUMPTION note above).
- *    The cross-check genuinely cannot run, so the caller skips it and
- *    trusts the model's candidates as-is — same as before this fix existed.
- *  - `{ available: true, urls: Map }` — grounding metadata WAS present
- *    (Gemini did search real pages), but `urls` may still be an empty Map
- *    if every citation redirect failed to resolve (e.g. every real site
- *    rejected both HEAD and GET, or a network blip). This is NOT the same
- *    as "no grounding" — the caller must fail closed here (drop every
- *    candidate) rather than let fabricated URLs through unfiltered, which
- *    is exactly the bug that let invented ke.usembassy.gov paths reach
- *    production even after the exact-match check was added: an empty Map
- *    was indistinguishable from "no grounding metadata" and both silently
- *    skipped the check.
+ * True when [url] is on the same registrable-ish domain as [website] (via
+ * [safeHostname], which already strips a leading "www."). Used only to find
+ * a genuinely real, grounding-confirmed page to prefer over the bare
+ * homepage for a fallback — never to accept a candidate's own claimed URL
+ * (that's applyGroundedUrlCrossCheck's exact-match job, not this).
  */
-async function extractGroundedUrls(response) {
-  const chunks = response?.candidates?.[0]?.groundingMetadata?.groundingChunks;
-  if (!Array.isArray(chunks) || chunks.length === 0) {
-    return { available: false, urls: null };
-  }
+function sameDomain(url, website) {
+  const a = safeHostname(url);
+  const b = safeHostname(website);
+  return a != null && b != null && a === b;
+}
 
-  const redirectUris = chunks
-    .map((chunk) => chunk?.web?.uri)
-    .filter((uri) => typeof uri === "string");
-  if (redirectUris.length === 0) {
-    return { available: false, urls: null };
-  }
-
-  const resolved = await Promise.all(
-    redirectUris.map((uri) => resolveGroundingUrl(uri)),
+/**
+ * Picks a single better-than-the-homepage fallback URL from [groundedUrls]
+ * (every real page Google Search grounding actually retrieved this run —
+ * see applyGroundedUrlCrossCheck) when the pairing is unambiguous: exactly
+ * one grounded URL lives on [source.website]'s domain, AND exactly one
+ * candidate in [dropped] needs a fallback this run. With any more of
+ * either — several same-domain grounded pages, or several dropped
+ * candidates — there's no way to know which real page belongs to which
+ * candidate, so this deliberately returns `null` rather than guess or
+ * attach the same URL to more than one candidate (never mis-attribute a
+ * real page to the wrong opportunity). Falls back to the bare
+ * `source.website` homepage in every other case — never invents a URL.
+ */
+function pickUnambiguousGroundedFallback(dropped, groundedUrls, source) {
+  if (!Array.isArray(dropped) || dropped.length !== 1) return null;
+  const sameDomainMatches = (groundedUrls || []).filter((url) =>
+    sameDomain(url, source.website),
   );
-  const urlByNormalized = new Map();
-  for (const url of resolved) {
-    if (!url) continue;
-    urlByNormalized.set(url.replace(/\/$/, ""), url);
+  return sameDomainMatches.length === 1 ? sameDomainMatches[0] : null;
+}
+
+/**
+ * HARD geography gate — TenderSources are not all Kenya/East-Africa scoped
+ * (CanadaBuys, UK Find a Tender, DevelopmentAid, etc. are seeded alongside
+ * the regional ones — see seedTenderSources.js), so this connector needs
+ * the same allow-list runOpportunityDiscovery applies: only Kenya/Uganda/
+ * Tanzania/Rwanda/Burundi candidates survive, regardless of fit score.
+ * Every survivor is tagged with `geographyPriority` (Kenya ranks above the
+ * other four East African countries — see classifyGeographyPriority) so a
+ * TenderSource-originated opportunity is prioritized identically to one
+ * from the standalone AI-search "Search" button, regardless of which
+ * discovery path found it. Pure/synchronous so it's independently testable
+ * without stubbing Gemini or fetch.
+ */
+function applyGeographyGate(candidates) {
+  return candidates
+    .filter((c) => isAllowedCountry(c))
+    .map((c) => ({ ...c, geographyPriority: classifyGeographyPriority(c) }));
+}
+
+/**
+ * Turns a subset of grounding-cross-check-rejected candidates into
+ * `sourceUrlIsFallback` candidates pointing at a real URL — the "at least
+ * point them somewhere real" fallback for a source whose grounding
+ * genuinely couldn't confirm an exact tender URL this run. Prefers an
+ * unambiguous same-domain page grounding actually retrieved (see
+ * [pickUnambiguousGroundedFallback]) over the bare `source.website`
+ * homepage when one can be attributed with certainty; otherwise falls back
+ * to the homepage, exactly as before — never invents or guesses a URL that
+ * wasn't independently confirmed real by either the reachability check
+ * (createOpportunitiesFromCandidates) or Google Search grounding itself.
+ * Pure/synchronous so it's independently testable without stubbing Gemini
+ * or fetch.
+ *
+ * Returns `[]` when `source.website` is unset (no fallback is ever invented
+ * without a known real website) or when [dropped] is empty. Only candidates
+ * with a real `title` are eligible (same "at least identify what it is" bar
+ * `createOpportunitiesFromCandidates` already applies to every candidate),
+ * capped at [MAX_WEBSITE_FALLBACKS_PER_RUN] so a source whose grounding is
+ * broadly failing this run doesn't flood the pipeline with many generic
+ * fallback opportunities.
+ */
+function buildWebsiteFallbackCandidates(dropped, source, groundedUrls = []) {
+  if (!source?.website || !Array.isArray(dropped) || dropped.length === 0) {
+    return [];
   }
-  return { available: true, urls: urlByNormalized };
+  const eligible = dropped.filter((c) => c && c.title);
+  const unambiguousFallback = pickUnambiguousGroundedFallback(
+    eligible,
+    groundedUrls,
+    source,
+  );
+  return eligible
+    .slice(0, MAX_WEBSITE_FALLBACKS_PER_RUN)
+    .map((c) => ({
+      ...c,
+      sourceUrl: unambiguousFallback || source.website,
+      sourceUrlIsFallback: true,
+    }));
+}
+
+/**
+ * Extra guard for a source with a known real `website`: even a candidate
+ * that survived the exact-URL grounding cross-check (i.e. its sourceUrl
+ * matched something Google Search grounding retrieved) is demoted to a
+ * `sourceUrlIsFallback` candidate — same treatment as a grounding-rejected
+ * one, pointing at `source.website` instead — if that sourceUrl is NOT on
+ * the same domain as `source.website`. This exists specifically for the
+ * case the plain exact-match check cannot catch on its own: when Google
+ * Search grounding metadata is unavailable for a response at all
+ * (`applyGroundedUrlCrossCheck` then trusts every candidate's claimed URL
+ * unchecked — see its doc comment), a fabricated `ke.usembassy.gov` path
+ * would otherwise sail through untouched as a "kept" candidate whenever the
+ * model happens to also claim the right domain. A source that has a known
+ * real website should never trust an unverifiable or off-domain URL as
+ * primary — the website (or a same-domain grounded page, same as
+ * [pickUnambiguousGroundedFallback]) is always safer than an unconfirmed
+ * claim. No-op when `source.website` is unset — this guard only ever
+ * applies to sources that have one.
+ */
+function enforceSameDomainWhenWebsiteKnown(kept, source, groundedUrls = []) {
+  if (!source?.website || !Array.isArray(kept) || kept.length === 0) {
+    return { kept, demoted: [] };
+  }
+
+  const stillKept = [];
+  const demoted = [];
+  for (const c of kept) {
+    if (sameDomain(c.sourceUrl, source.website)) {
+      stillKept.push(c);
+    } else {
+      demoted.push(c);
+    }
+  }
+  if (demoted.length === 0) return { kept: stillKept, demoted: [] };
+
+  const fallbacks = buildWebsiteFallbackCandidates(demoted, source, groundedUrls);
+  return { kept: stillKept, demoted: fallbacks };
 }
 
 /**
@@ -256,6 +280,12 @@ Using web search, find up to 8 currently open opportunities from ${targeting}${
 For each one, estimate a fit score (0-100) for how well this company's stack and
 experience match the opportunity, and briefly justify the score.
 
+GEOGRAPHY — only include opportunities located in Kenya, Uganda, Tanzania,
+Rwanda, or Burundi. Do not include opportunities from any other country
+(e.g. Canada, the UK, the US, or elsewhere in Africa) even if they otherwise
+look like a strong match — they will be discarded regardless of fit score,
+so do not waste a slot on one.
+
 CRITICAL — "sourceUrl" must be a direct, real, publicly loadable link to the
 actual tender/opportunity page as it appears in the address bar of the site
 that published it (e.g. the procurement portal, UN/NGO tender board, or
@@ -336,47 +366,68 @@ explanation before or after it, even when the array is empty.`;
     // "ke.usembassy.gov/embassy-of-the-united-states..." when the real,
     // grounded page was "ke.usembassy.gov/request-for-quotation-..."). A
     // domain-only check would have let that through; exact-URL matching
-    // does not. Falls back to domain-only matching (dropping, not
-    // rewriting) only when no exact grounded URL match exists, so a
-    // candidate is never silently kept with a fabricated path.
-    const { available: groundingAvailable, urls: groundedUrls } =
-      await extractGroundedUrls(response);
-    if (!groundingAvailable) {
-      // Genuinely no grounding metadata on this response at all (or an SDK
-      // shape mismatch) — the cross-check cannot run, so fall back to
-      // trusting the model's candidates as-is, same as before this fix
-      // existed.
-      logger.warn(
-        "ApiConnector(aiSearch): no grounding metadata on this response — skipping the grounded-URL cross-check for this run",
+    // does not. Candidates that fail the check are dropped (never rewritten
+    // to a domain-only guess) by applyGroundedUrlCrossCheck (shared with
+    // runOpportunityDiscovery in index.js — see lib/groundedUrlValidation.js).
+    const candidatesFromModel = candidates.length;
+    const { kept, dropped, groundedUrls } = await applyGroundedUrlCrossCheck(
+      candidates,
+      response,
+      { logPrefix: "ApiConnector(aiSearch)" },
+    );
+    const groundingDroppedCount = dropped.length;
+
+    // Extra guard on top of the exact-match check above, specifically for
+    // when grounding metadata was unavailable this run (applyGroundedUrlCrossCheck
+    // then trusts every candidate's claimed URL unchecked) — a source with a
+    // known real website must never let an off-domain/unverifiable URL stand
+    // as the primary sourceUrl. See enforceSameDomainWhenWebsiteKnown.
+    const { kept: sameDomainKept, demoted: sameDomainDemoted } =
+      enforceSameDomainWhenWebsiteKnown(kept, source, groundedUrls);
+    candidates = sameDomainKept;
+    if (sameDomainDemoted.length > 0) {
+      logger.info(
+        `ApiConnector(aiSearch): demoted ${sameDomainDemoted.length} off-domain candidate(s) to source.website fallback (${source.website})`,
       );
-    } else {
-      // Grounding metadata WAS present — Gemini did search real pages —
-      // even if `groundedUrls` ends up empty because every citation
-      // redirect failed to resolve. That is NOT the same as "no grounding"
-      // and must fail closed (drop unmatched candidates) rather than let
-      // every candidate through unfiltered, which is what let fabricated
-      // URLs reach production even with this check nominally in place.
-      const beforeCount = candidates.length;
-      candidates = candidates
-        .map((c) => {
-          const normalized =
-            typeof c?.sourceUrl === "string"
-              ? c.sourceUrl.replace(/\/$/, "")
-              : null;
-          const groundedMatch =
-            normalized != null ? groundedUrls.get(normalized) : null;
-          return groundedMatch ? { ...c, sourceUrl: groundedMatch } : null;
-        })
-        .filter((c) => c != null);
-      const droppedCount = beforeCount - candidates.length;
-      if (droppedCount > 0) {
-        logger.info(
-          `ApiConnector(aiSearch): dropped ${droppedCount} candidate(s) whose sourceUrl wasn't backed by an exact search-grounding match`,
-        );
-      }
+      candidates = [...candidates, ...sameDomainDemoted];
     }
 
-    return createOpportunitiesFromCandidates(db, source, candidates);
+    // A candidate dropped for lacking an exact grounded match never had a
+    // real, confirmed sourceUrl to begin with — it's not "downgrading" a
+    // good direct tender URL to fall back to a real page for a few of them,
+    // since a fabricated 404 is strictly worse for the user than a working
+    // link they can search from. See buildWebsiteFallbackCandidates for the
+    // selection/cap logic, including when it can use a genuinely better,
+    // grounding-confirmed same-domain page instead of the bare homepage.
+    const fallbacks = buildWebsiteFallbackCandidates(dropped, source, groundedUrls);
+    if (fallbacks.length > 0) {
+      logger.info(
+        `ApiConnector(aiSearch): falling back ${fallbacks.length} dropped candidate(s) to source.website (${source.website})`,
+      );
+      candidates = [...candidates, ...fallbacks];
+    }
+
+    // Applied after the website-fallback step above (not before) so a
+    // fallback candidate is checked too — pointing at a source's website
+    // never exempts it from the geography rule. See applyGeographyGate.
+    const beforeGeographyCount = candidates.length;
+    candidates = applyGeographyGate(candidates);
+    const geographyDroppedCount = beforeGeographyCount - candidates.length;
+
+    const result = await createOpportunitiesFromCandidates(db, source, candidates);
+    // One summary line per sync showing where candidates were lost — same
+    // "diagnosable from Cloud Logging alone" goal as runOpportunityDiscovery's
+    // equivalent summary in index.js.
+    logger.info(
+      `ApiConnector(aiSearch): ${candidatesFromModel} from model -> ` +
+        `${groundingDroppedCount} dropped (grounding), ` +
+        `${sameDomainDemoted.length} demoted (off-domain), ` +
+        `${fallbacks.length} fell back to source.website, ` +
+        `${geographyDroppedCount} dropped (geography — outside Kenya/Uganda/Tanzania/Rwanda/Burundi), ` +
+        `${result.duplicatesSkipped} duplicates skipped, ` +
+        `${result.created} created (${result.verifiedCount} verified, ${result.unverifiedCount} unverified)`,
+    );
+    return result;
   }
 
   async _syncRestJson(source, db) {
@@ -413,4 +464,10 @@ explanation before or after it, even when the array is empty.`;
   }
 }
 
-module.exports = { ApiConnector };
+module.exports = {
+  ApiConnector,
+  buildWebsiteFallbackCandidates,
+  pickUnambiguousGroundedFallback,
+  enforceSameDomainWhenWebsiteKnown,
+  applyGeographyGate,
+};

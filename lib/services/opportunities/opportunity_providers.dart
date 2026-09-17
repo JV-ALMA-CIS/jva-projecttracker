@@ -11,6 +11,7 @@ import 'package:jva_projecttracker/services/executive_intelligence_service.dart'
 import 'package:jva_projecttracker/services/match_analysis_service.dart';
 import 'package:jva_projecttracker/services/opportunity_business_unit_backfill_service.dart';
 import 'package:jva_projecttracker/services/opportunity_event_service.dart';
+import 'package:jva_projecttracker/services/opportunity_filters.dart';
 import 'package:jva_projecttracker/services/opportunity_service.dart';
 import 'package:jva_projecttracker/services/source_url_verification_service.dart';
 import 'package:jva_projecttracker/services/strategic_review_service.dart';
@@ -88,10 +89,17 @@ final opportunityEventsByOpportunityProvider =
 
 /// The top 5 opportunities by fit score, derived from [opportunitiesStreamProvider]
 /// (already ordered by `fitScorePercent` desc at the Firestore query level).
+/// Off-region opportunities (see [isOffRegionOpportunity]) are excluded
+/// first: they predate the discovery pipeline's geography hard-filter and
+/// would otherwise still surface here by fit score alone, even though the
+/// app should never suggest pursuing them.
 final topOpportunitiesProvider = Provider<List<Opportunity>>((ref) {
   final opportunities =
       ref.watch(opportunitiesStreamProvider).value ?? const [];
-  return opportunities.take(5).toList();
+  return opportunities
+      .where((o) => !isOffRegionOpportunity(o))
+      .take(5)
+      .toList();
 });
 
 /// Opportunity counts per pipeline stage, derived from

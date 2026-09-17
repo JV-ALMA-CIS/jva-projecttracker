@@ -2,7 +2,7 @@ import 'package:jva_projecttracker/models/opportunity.dart';
 
 /// What generated a [NotificationItem] — drives its icon and which group it
 /// renders under in `NotificationCenterScreen`.
-enum NotificationType { recommendation, deadline }
+enum NotificationType { recommendation, deadline, matchScore }
 
 /// A single entry in the Notification Center, derived (never persisted) by
 /// `buildNotifications` from live AI Recommendations (Milestone 3.6) and
@@ -19,6 +19,7 @@ class NotificationItem {
     required this.title,
     this.body,
     this.daysUntilDeadline,
+    this.matchScorePercent,
     required this.timestamp,
     this.relatedOpportunityIds = const [],
     this.recommendationId,
@@ -46,6 +47,11 @@ class NotificationItem {
   /// `NotificationTile`), not baked into this model by the (locale-unaware)
   /// pure `buildNotifications` function.
   final int? daysUntilDeadline;
+
+  /// Set only for [NotificationType.matchScore] — the opportunity's current
+  /// `overallMatchScore` (or `fitScorePercent` fallback) that crossed
+  /// [kMatchScoreNotifyThreshold], for display (e.g. "Match score: 82%").
+  final int? matchScorePercent;
   final DateTime timestamp;
   final List<String> relatedOpportunityIds;
 

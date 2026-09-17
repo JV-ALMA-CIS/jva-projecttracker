@@ -69,15 +69,43 @@ class DiscoveryDashboardBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = ref.watch(appStringsProvider);
+    // Gate on the raw stream first — tenderDiscoveryMetricsProvider derives
+    // totalSources via `.value ?? const []`, which can't distinguish "still
+    // loading"/"errored" from "genuinely zero sources". Watching the stream
+    // here lets this widget show a spinner/error instead of jumping straight
+    // to the empty state before the first snapshot has even arrived.
+    final tenderSourcesAsync = ref.watch(tenderSourcesStreamProvider);
+
+    return tenderSourcesAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text(strings.errorPrefix(e))),
+      data: (sources) {
+        if (sources.isEmpty) {
+          return EmptyState(
+            icon: Icons.travel_explore_outlined,
+            title: strings.noTenderSourcesConfiguredMessage,
+          );
+        }
+        return _DiscoveryDashboardContent(strings: strings);
+      },
+    );
+  }
+}
+
+/// The dashboard's actual content — unchanged from before, just extracted so
+/// [DiscoveryDashboardBody.build] can gate on the tender-sources AsyncValue
+/// first. Still reads [tenderDiscoveryMetricsProvider]/
+/// [recentTenderSyncRunsProvider] exactly as before; no calculation logic
+/// changed.
+class _DiscoveryDashboardContent extends ConsumerWidget {
+  const _DiscoveryDashboardContent({required this.strings});
+
+  final AppStrings strings;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final metrics = ref.watch(tenderDiscoveryMetricsProvider);
     final recentRuns = ref.watch(recentTenderSyncRunsProvider);
-
-    if (metrics.totalSources == 0) {
-      return EmptyState(
-        icon: Icons.travel_explore_outlined,
-        title: strings.noTenderSourcesConfiguredMessage,
-      );
-    }
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),

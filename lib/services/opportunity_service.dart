@@ -106,6 +106,22 @@ class OpportunityService {
     });
   }
 
+  /// Durably records that a ≥70% match-score notification was raised for
+  /// this opportunity at [score] — the client-side counterpart to
+  /// `buildNotifications`'s ephemeral (device-local, Notification-Center-
+  /// only) derivation. Called once per newly-qualifying decade bucket (see
+  /// `matchScoreNotificationListenerProvider`), so this write only happens
+  /// on a genuine new/increased match, never on every rebuild. Same narrow
+  /// field-only update shape as [markSourceUrlVerified].
+  Future<void> markMatchNotificationSent(String id, int score) {
+    final now = Timestamp.now();
+    return _collection.doc(id).update({
+      'lastNotifiedScore': score,
+      'matchNotificationSentAt': now,
+      'updatedAt': now,
+    });
+  }
+
   /// Narrow write path for the Opportunity Workspace's manual Eligibility
   /// requirements editor — same shape as [updateBusinessUnitIds]. Kept
   /// separate from AI-written fields since certification requirements are
@@ -119,6 +135,26 @@ class OpportunityService {
       'requiredCertifications': requiredCertifications
           .map((r) => r.toMap())
           .toList(),
+      'updatedAt': Timestamp.now(),
+    });
+  }
+
+  /// Narrow write path for the Opportunity Workspace's tender-details editor
+  /// (procuring organization, tender reference number, required
+  /// technologies) — same shape as [updateBusinessUnitIds]. Kept separate
+  /// from [update] so a human editing just these fields never risks
+  /// clobbering AI-written classification/match-analysis fields with a
+  /// stale local copy.
+  Future<void> updateTenderDetails(
+    String id, {
+    String? procuringOrganization,
+    String? tenderReferenceNumber,
+    required List<String> requiredTechnologies,
+  }) {
+    return _collection.doc(id).update({
+      'procuringOrganization': procuringOrganization,
+      'tenderReferenceNumber': tenderReferenceNumber,
+      'requiredTechnologies': requiredTechnologies,
       'updatedAt': Timestamp.now(),
     });
   }

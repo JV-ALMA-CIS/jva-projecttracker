@@ -63,7 +63,38 @@ cd functions && npm install && cd ..
 firebase deploy --only functions
 ```
 
-## 7. Run the app
+## 7. Finish push notification setup (per platform)
+
+The app already saves each signed-in device's FCM token, shows push notifications
+in every app state (open/backgrounded/terminated), and deep-links a tap to the
+relevant opportunity (see `lib/services/push_notification_service.dart` and
+`functions/matchScorePushNotification.js`, which fires whenever an opportunity's
+match score crosses 70%). Three pieces still need a one-time manual setup per
+platform, since each requires an interactive console/IDE step:
+
+- **Web** — generate a Web Push certificate: console → Project Settings →
+  Cloud Messaging → Web Push certificates → "Generate key pair". Paste the
+  resulting key into `kFcmWebVapidKey` in `lib/services/fcm_token_service.dart`
+  (replacing `REPLACE_ME_FCM_WEB_VAPID_KEY`). Without this, `getToken()` on web
+  silently returns null and no web device ever registers for push.
+  Also: if you re-run `flutterfire configure` against a different Firebase
+  project, update the hardcoded config object in `web/firebase-messaging-sw.js`
+  to match the new `lib/firebase_options.dart` web values — `flutterfire
+  configure` does not touch that file, and it needs the same project's config to
+  authenticate with FCM from the service worker.
+- **Android** — no manual step. `POST_NOTIFICATIONS` permission and the default
+  notification channel are already declared in `AndroidManifest.xml`.
+- **iOS** — requires an Apple Developer account. In Xcode, open
+  `ios/Runner.xcworkspace` → Runner target → Signing & Capabilities → "+
+  Capability" → **Push Notifications** (this project's `Runner.entitlements`
+  and `CODE_SIGN_ENTITLEMENTS` build setting are already in place, but Xcode
+  still needs to regenerate a matching provisioning profile once you're signed
+  into your team). Then, in the Firebase console → Project Settings → Cloud
+  Messaging → Apple app configuration, upload an APNs authentication key (or
+  certificate) from your Apple Developer account — FCM can't deliver to iOS
+  devices without one.
+
+## 8. Run the app
 
 ```
 flutter run -d chrome   # or -d <android device id>

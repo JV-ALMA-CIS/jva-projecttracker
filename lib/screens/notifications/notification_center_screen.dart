@@ -39,6 +39,10 @@ class NotificationCenterScreen extends ConsumerWidget {
       for (final n in notifications)
         if (n.type == NotificationType.deadline) n,
     ];
+    final matchScoreItems = [
+      for (final n in notifications)
+        if (n.type == NotificationType.matchScore) n,
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -93,6 +97,26 @@ class NotificationCenterScreen extends ConsumerWidget {
                     accentColor: AppStatusColors.warning,
                   ),
                   for (final (i, n) in deadlineItems.indexed)
+                    FadeSlideIn(
+                      index: i,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: NotificationTile(
+                          notification: n,
+                          onTap: () => pushSlideFade(
+                            context,
+                            const OpportunitiesScreen(),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+                if (matchScoreItems.isNotEmpty) ...[
+                  SectionHeader(
+                    title: strings.strongMatchesGroupLabel,
+                    accentColor: AppStatusColors.success,
+                  ),
+                  for (final (i, n) in matchScoreItems.indexed)
                     FadeSlideIn(
                       index: i,
                       child: Padding(

@@ -339,6 +339,60 @@ bool matchesSearchQuery(Opportunity opportunity, String query) {
       opportunity.sourceUrl.toLowerCase().contains(trimmed);
 }
 
+/// Country/region keywords that make an opportunity in-region — mirrors
+/// `functions/opportunityRelevance.js`'s `GEOGRAPHY_KEYWORDS.kenya`/
+/// `eastAfrica` tables exactly (Kenya primary, Uganda/Tanzania/Rwanda/
+/// Burundi secondary), so the client-side bulk-cleanup dialog's "off-region"
+/// preview agrees with what the discovery pipeline itself now allows/blocks.
+/// Kept as a separate small Dart table rather than sharing code with the
+/// Cloud Function (different language/runtime) — any future edit to one
+/// side should be mirrored in the other.
+const List<String> _inRegionKeywords = [
+  'kenya',
+  'nairobi',
+  'mombasa',
+  'kisumu',
+  'nakuru',
+  'eldoret',
+  'kenyan',
+  'uganda',
+  'tanzania',
+  'rwanda',
+  'burundi',
+  'kampala',
+  'dar es salaam',
+  'dodoma',
+  'zanzibar',
+  'kigali',
+  'bujumbura',
+];
+
+/// True when [opportunity]'s title/description/client text names none of
+/// Kenya/Uganda/Tanzania/Rwanda/Burundi (nor a well-known city within one) —
+/// i.e. it would have been rejected by the discovery pipeline's
+/// `isAllowedCountry` hard filter had it run today. Used only by the bulk
+/// cleanup dialog's "Off-region only" mode to find pre-existing opportunities
+/// written before that filter was deployed; never used to gate new writes
+/// (that happens server-side in Cloud Functions).
+bool isOffRegionOpportunity(Opportunity opportunity) {
+  final haystack =
+      '${opportunity.title} ${opportunity.description} '
+              '${opportunity.client ?? ''}'
+          .toLowerCase();
+  return !_inRegionKeywords.any((k) => haystack.contains(k));
+}
+
+/// True when [opportunity] is still early enough in the pipeline
+/// (`discovered`/`reviewing`) that bulk-deleting it can't destroy real
+/// proposal/submission work — mirrors
+/// `functions/cleanupOffRegionOpportunities.js`'s own status guard, so the
+/// client-side "Off-region only" cleanup mode never offers to delete
+/// anything that function itself would protect.
+bool isSafeToBulkCleanup(Opportunity opportunity) {
+  return opportunity.status == OpportunityStatus.discovered ||
+      opportunity.status == OpportunityStatus.reviewing;
+}
+
 /// The full set of currently-applied facet filters (BU selection aside,
 /// which is handled separately by [matchesBuFilter] since it drives the
 /// tab/segmented control rather than a chip row). All fields default to

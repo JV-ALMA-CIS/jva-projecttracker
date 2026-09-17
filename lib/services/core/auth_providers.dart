@@ -2,10 +2,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/models/user_profile.dart';
 import 'package:jva_projecttracker/services/auth_service.dart';
+import 'package:jva_projecttracker/services/fcm_token_service.dart';
 import 'package:jva_projecttracker/services/user_service.dart';
 
 final authServiceProvider = Provider((ref) => AuthService());
 final userServiceProvider = Provider((ref) => UserService());
+final fcmTokenServiceProvider = Provider((ref) => FcmTokenService());
 
 final authStateChangesProvider = StreamProvider<User?>((ref) {
   return ref.watch(authServiceProvider).authStateChanges();

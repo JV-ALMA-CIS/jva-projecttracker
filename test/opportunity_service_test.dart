@@ -100,6 +100,28 @@ void main() {
     expect(updated.title, 'Rural water tender');
   });
 
+  test(
+    'updateTenderDetails writes procuringOrganization/tenderReferenceNumber/requiredTechnologies without touching unrelated fields',
+    () async {
+      final id = await seedOpportunity();
+
+      await service.updateTenderDetails(
+        id,
+        procuringOrganization: 'KTDA',
+        tenderReferenceNumber: 'KTDA/ICT/2026/014',
+        requiredTechnologies: const ['Flutter', 'Firebase'],
+      );
+
+      final updated = await service.watchById(id).first;
+      expect(updated!.procuringOrganization, 'KTDA');
+      expect(updated.tenderReferenceNumber, 'KTDA/ICT/2026/014');
+      expect(updated.requiredTechnologies, ['Flutter', 'Firebase']);
+      // Untouched fields survive the update.
+      expect(updated.title, 'Rural water tender');
+      expect(updated.status, OpportunityStatus.discovered);
+    },
+  );
+
   test('delete removes the document', () async {
     final id = await seedOpportunity();
     await service.delete(id);
@@ -325,6 +347,34 @@ void main() {
       final id = await seedOpportunity();
 
       await service.markSourceUrlVerified(id);
+
+      final after = await service.watchById(id).first;
+      expect(after!.title, 'Rural water tender');
+      expect(after.sourceUrl, 'https://example.com/tender/1');
+      expect(after.status, OpportunityStatus.discovered);
+    });
+  });
+
+  group('markMatchNotificationSent', () {
+    test('sets lastNotifiedScore and stamps matchNotificationSentAt — the '
+        'durable counterpart to buildNotifications\' ephemeral match-score '
+        'notification', () async {
+      final id = await seedOpportunity();
+      final before = await service.watchById(id).first;
+      expect(before!.lastNotifiedScore, isNull);
+      expect(before.matchNotificationSentAt, isNull);
+
+      await service.markMatchNotificationSent(id, 82);
+
+      final after = await service.watchById(id).first;
+      expect(after!.lastNotifiedScore, 82);
+      expect(after.matchNotificationSentAt, isNotNull);
+    });
+
+    test('does not touch unrelated fields', () async {
+      final id = await seedOpportunity();
+
+      await service.markMatchNotificationSent(id, 82);
 
       final after = await service.watchById(id).first;
       expect(after!.title, 'Rural water tender');
