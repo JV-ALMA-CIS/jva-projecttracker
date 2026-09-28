@@ -1203,6 +1203,15 @@ Using web search, find up to 8 currently open opportunities from ${targeting}${
 For each one, estimate a fit score (0-100) for how well this company's stack and
 experience match the opportunity, and briefly justify the score.
 
+GEOGRAPHY — only include opportunities located in Kenya, Uganda, Tanzania,
+Rwanda, or Burundi; anything else is discarded regardless of fit score.
+
+CRITICAL — "sourceUrl" must be the direct, real, publicly loadable URL of the
+actual opportunity page, copied EXACTLY as it appeared in your search
+results. NEVER guess or reconstruct a URL, and NEVER return a Google Search
+redirect/citation link (e.g. vertexaisearch.cloud.google.com). If you did not
+literally see the real URL, omit that opportunity.
+
 Return ONLY a JSON array, each item shaped as:
 {
   "title": string,
@@ -1214,7 +1223,7 @@ Return ONLY a JSON array, each item shaped as:
   "fitScorePercent": number (0-100),
   "fitReasoning": string
 }
-No commentary, no markdown fences.`;
+If nothing qualifies, return []. No commentary, no markdown fences.`;
 
   const response = await ai.models.generateContent({
     model: GEMINI_MODEL,
@@ -1227,15 +1236,37 @@ No commentary, no markdown fences.`;
   try {
     candidates = extractJson(text);
   } catch (e) {
-    logger.error("runAiWebSearchAdapter: failed to parse model output", e, text);
-    throw new Error("Model did not return parseable JSON");
+    // An empty result is an expected outcome under the strict URL rules;
+    // the model sometimes explains it in prose instead of returning [].
+    logger.warn(
+      "runAiWebSearchAdapter: model returned no parseable JSON — treating as zero candidates",
+      e,
+      text,
+    );
+    candidates = [];
   }
   if (!Array.isArray(candidates)) candidates = [];
 
+  const candidatesFromModel = candidates.length;
+  const { kept: groundedCandidates } = await applyGroundedUrlCrossCheck(
+    candidates,
+    response,
+    { logPrefix: "runAiWebSearchAdapter" },
+  );
+  candidates = groundedCandidates
+    .filter((c) => c && c.sourceUrl && c.title)
+    .filter((c) => isRelevantCandidate(c) && isAllowedCountry(c))
+    .map((c) => ({ candidate: c, geographyPriority: classifyGeographyPriority(c) }))
+    .sort(
+      (a, b) =>
+        GEOGRAPHY_PRIORITY_RANK[a.geographyPriority] -
+        GEOGRAPHY_PRIORITY_RANK[b.geographyPriority],
+    );
+
   let created = 0;
   let duplicatesSkipped = 0;
-  for (const c of candidates) {
-    if (!c.sourceUrl || !c.title) continue;
+  for (const { candidate: c, geographyPriority } of candidates) {
+    if (isGroundingRedirectStub(c.sourceUrl)) continue;
 
     const existing = await db
       .collection("opportunities")
@@ -1248,16 +1279,21 @@ No commentary, no markdown fences.`;
     }
 
     const now = admin.firestore.Timestamp.now();
+    const { reachable: sourceUrlVerified, finalUrl } = await checkUrlReachable(c.sourceUrl);
     await db.collection("opportunities").add({
       title: c.title,
       description: c.description || "",
-      sourceUrl: c.sourceUrl,
+      sourceUrl: sourceUrlVerified && finalUrl ? finalUrl : c.sourceUrl,
+      sourceUrlVerified,
+      sourceUrlVerifiedAt: sourceUrlVerified ? now : null,
+      sourceUrlIsFallback: false,
       client: c.client || null,
       deadline: c.deadline ? admin.firestore.Timestamp.fromDate(new Date(c.deadline)) : null,
       status: "discovered",
       fitScorePercent: Math.max(0, Math.min(100, Math.round(c.fitScorePercent || 0))),
       fitReasoning: c.fitReasoning || "",
       tags: Array.isArray(c.tags) ? c.tags : [],
+      geographyPriority,
       discoveredAt: now,
       updatedAt: now,
       discoverySourceId: source.id,
@@ -1266,7 +1302,7 @@ No commentary, no markdown fences.`;
     created += 1;
   }
 
-  return { candidatesFound: candidates.length, created, duplicatesSkipped };
+  return { candidatesFound: candidatesFromModel, created, duplicatesSkipped };
 }
 
 /**

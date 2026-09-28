@@ -7,6 +7,7 @@
   "main": "index.js",
   "scripts": {
     "deploy": "firebase deploy --only functions",
+    "test": "node opportunityRelevance.test.js && node businessUnitMatching.test.js && node cleanupOffRegionOpportunities.test.js && node matchScorePushNotification.test.js && node connectors/apiConnector.test.js && node connectors/tenderSourceConnector.test.js && node lib/groundedUrlValidation.test.js",
     "migrate:contracts": "node scripts/migrate-contracts-to-opportunities.js",
     "migrate:contracts:dry-run": "node scripts/migrate-contracts-to-opportunities.js --dry-run"
   },

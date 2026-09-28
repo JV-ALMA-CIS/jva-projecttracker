@@ -59,17 +59,15 @@ change, it would simplify the parsing.
 - Run `dart format .` on any updated or newly created Dart file.
 
 ## Current State / Pending Work
-- **Not yet wired to a real Firebase project.** `lib/firebase_options.dart` is a
-  placeholder (`REPLACE_ME` values) — see `FIREBASE_SETUP.md` for the full manual
-  setup checklist (create Firebase project, enable Blaze billing + `aiplatform.googleapis.com`,
-  `flutterfire configure`, deploy rules/functions). These steps require interactive
-  Google login/billing console access, so they were left for the user to run.
+- **Wired to Firebase project `jva-projecttracker`.** 35 Cloud Functions are deployed
+  (Node 22, `firebase-functions` 7) and the web app is hosted at
+  https://jva-projecttracker.web.app. Deploy functions with `firebase deploy --only functions`,
+  web with `flutter build web --release && firebase deploy --only hosting`. Run all
+  function tests with `cd functions && npm test`. `functions/node_modules` is git-ignored.
+- Push notifications (FCM) are code-complete and deployed, but not yet verified on real
+  Android/iOS/web devices.
 - Firestore security rules (`firestore.rules`) currently just require
   `request.auth != null` on all three collections — no role separation yet. Fine for
   a small internal team; revisit if this grows.
-- No auth screen/flow has been built yet in the Flutter app itself — Firebase Auth is
-  enabled as a dependency but there's no sign-in UI. Whoever picks this up next should
-  decide on a sign-in method (Email/Password is simplest) before the app is usable
-  beyond local emulation.
-- No tests exist yet (`test/widget_test.dart` was removed as it was the unmodified
-  counter-app template and no longer matched the app).
+- No Flutter widget tests exist yet (`test/widget_test.dart` was removed as it was the
+  unmodified counter-app template). Cloud Functions have plain-Node tests (`npm test`).
