@@ -1,6 +1,18 @@
 const { SecretManagerServiceClient } = require("@google-cloud/secret-manager");
 
-const client = new SecretManagerServiceClient();
+// Built lazily (on first resolveSecret call) rather than at module load —
+// the client constructor does credential/environment auto-detection
+// (including a GCE metadata server probe) that can block for many seconds
+// off-GCP. Since every Cloud Functions deploy loads the full index.js
+// require graph just to enumerate exports (regardless of which function is
+// targeted), an eager client here made `firebase deploy` hang/time out
+// from any non-GCE dev machine, for every function, not just ones that
+// actually use secrets.
+let client;
+function secretManagerClient() {
+  if (!client) client = new SecretManagerServiceClient();
+  return client;
+}
 const cache = new Map();
 
 /**
@@ -19,7 +31,7 @@ async function resolveSecret(secretName) {
   if (cache.has(secretName)) return cache.get(secretName);
 
   const project = process.env.GCLOUD_PROJECT;
-  const [version] = await client.accessSecretVersion({
+  const [version] = await secretManagerClient().accessSecretVersion({
     name: `projects/${project}/secrets/${secretName}/versions/latest`,
   });
   const value = version.payload.data.toString("utf8");

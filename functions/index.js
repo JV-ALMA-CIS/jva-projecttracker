@@ -3362,8 +3362,8 @@ exports.generateSubmissionReview = onCall({ timeoutSeconds: 120 }, async (reques
 });
 
 // ====================================================================
-// FCM Foundation — ≥70% match-score push trigger point (send not yet
-// implemented; see matchScorePushNotification.js)
+// FCM — sends a real push whenever an opportunity's match score crosses
+// into a new notify-worthy decade bucket (see matchScorePushNotification.js)
 // ====================================================================
 const {
   onOpportunityMatchScoreUpdated,
