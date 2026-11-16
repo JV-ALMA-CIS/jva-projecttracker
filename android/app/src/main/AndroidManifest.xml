@@ -35,11 +35,9 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- FCM foundation: default notification channel a future push will
-             be delivered on. No channel resource exists yet (no push is
-             actually sent today) — this is the minimal entry FCM's Android
-             SDK expects to find; a real channel definition/icon can be
-             added once real sends begin. -->
+        <!-- Default FCM notification channel. The channel itself is created
+             with IMPORTANCE_HIGH (heads-up banner + sound) in
+             MainActivity.kt; every push also names it explicitly. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="general" />

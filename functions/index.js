@@ -1,5 +1,6 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
@@ -700,6 +701,34 @@ function validateMatchAnalysis(parsed, validIds) {
  * Unlike classification, there is no intermediate "processing" status
  * field for match analysis — the client shows its own loading state instead.
  */
+/**
+ * Runs Match Analysis for one opportunity and writes the result onto its
+ * document. Shared by the analyzeOpportunityMatch callable and the
+ * onOpportunityCreated auto-scoring trigger. Throws if every AI attempt
+ * fails; returns the written fields plus the `matchAnalyzedAt` timestamp.
+ */
+async function runMatchAnalysis(oppRef, opportunity) {
+  const { text: knowledgeGraphText, validIds } = await buildKnowledgeGraph();
+  const prompt = buildMatchAnalysisPrompt({
+    title: opportunity.title,
+    description: opportunity.description,
+    knowledgeGraphText,
+  });
+
+  const result = await retryAsync(
+    async () => validateMatchAnalysis(await callGeminiForJson(prompt), validIds),
+    { label: "analyzeOpportunityMatch" },
+  );
+
+  const now = admin.firestore.Timestamp.now();
+  await oppRef.update({
+    ...result,
+    matchAnalyzedAt: now,
+    updatedAt: now,
+  });
+  return { result, matchAnalyzedAt: now };
+}
+
 exports.analyzeOpportunityMatch = onCall(
   { timeoutSeconds: 120 },
   async (request) => {
@@ -709,36 +738,18 @@ exports.analyzeOpportunityMatch = onCall(
     const oppRef = db.collection("opportunities").doc(opportunityId);
     const oppSnap = await oppRef.get();
     if (!oppSnap.exists) throw new HttpsError("not-found", "Opportunity not found");
-    const opportunity = oppSnap.data();
 
-    const { text: knowledgeGraphText, validIds } = await buildKnowledgeGraph();
-    const prompt = buildMatchAnalysisPrompt({
-      title: opportunity.title,
-      description: opportunity.description,
-      knowledgeGraphText,
-    });
-
-    let result;
+    let analysis;
     try {
-      result = await retryAsync(
-        async () => validateMatchAnalysis(await callGeminiForJson(prompt), validIds),
-        { label: "analyzeOpportunityMatch" },
-      );
+      analysis = await runMatchAnalysis(oppRef, oppSnap.data());
     } catch (e) {
       logger.error("analyzeOpportunityMatch: all attempts failed", e);
       throw new HttpsError("internal", "AI match analysis failed after retries");
     }
 
-    const now = admin.firestore.Timestamp.now();
-    await oppRef.update({
-      ...result,
-      matchAnalyzedAt: now,
-      updatedAt: now,
-    });
-
     return {
-      ...result,
-      matchAnalyzedAt: now.toDate().toISOString(),
+      ...analysis.result,
+      matchAnalyzedAt: analysis.matchAnalyzedAt.toDate().toISOString(),
     };
   },
 );
@@ -3403,5 +3414,84 @@ exports.generateSubmissionReview = onCall({ timeoutSeconds: 120 }, async (reques
 // ====================================================================
 const {
   onOpportunityMatchScoreUpdated,
+  matchNotifyScoreFor,
+  notifyAllUsers,
+  collectRecipientTokens,
+  sendToTokens,
 } = require("./matchScorePushNotification");
 exports.onOpportunityMatchScoreUpdated = onOpportunityMatchScoreUpdated;
+
+/**
+ * True when an opportunity was written without any usable score — the RSS,
+ * HTML-scraper and email connectors deliberately leave fitScorePercent at 0
+ * and never run Match Analysis, so without auto-scoring these tenders could
+ * never reach the notification threshold.
+ */
+function isUnscoredOpportunity(opportunity) {
+  return (
+    typeof opportunity.overallMatchScore !== "number" &&
+    !(opportunity.fitScorePercent > 0) &&
+    !opportunity.matchAnalyzedAt
+  );
+}
+
+/**
+ * Fires for every newly created opportunity, from every source (AI
+ * discovery, tender-source sync, manual entry):
+ * - already scored at or above the notify threshold (AI discovery assigns a
+ *   fitScorePercent up front) → push "New opportunity" to every user now;
+ * - unscored (feed/scraper/email sources) → run Match Analysis
+ *   automatically. If the resulting score qualifies, the score write
+ *   triggers onOpportunityMatchScoreUpdated, which sends the push — so the
+ *   push is never sent twice for the same opportunity;
+ * - scored below threshold, or closed → nothing.
+ * Failures are logged, never thrown (no retries on this trigger, so a
+ * failed AI call can't loop and run up cost).
+ */
+exports.onOpportunityCreated = onDocumentCreated(
+  { document: "opportunities/{opportunityId}", timeoutSeconds: 180 },
+  async (event) => {
+    const opportunity = event.data?.data();
+    if (!opportunity) return;
+    const opportunityId = event.params.opportunityId;
+
+    const score = matchNotifyScoreFor(opportunity);
+    if (score != null) {
+      await notifyAllUsers({
+        type: "newOpportunity",
+        opportunityId,
+        opportunityTitle: opportunity.title,
+        score,
+      });
+      return;
+    }
+
+    if (!isUnscoredOpportunity(opportunity)) return;
+    if (["won", "lost", "dismissed"].includes(opportunity.status)) return;
+
+    try {
+      const { result } = await runMatchAnalysis(event.data.ref, opportunity);
+      logger.info(
+        `onOpportunityCreated: auto-scored ${opportunityId} at ${result.overallMatchScore ?? "n/a"}%`,
+      );
+    } catch (e) {
+      logger.error(`onOpportunityCreated: auto Match Analysis failed for ${opportunityId}`, e);
+    }
+  },
+);
+
+/**
+ * Callable: sendTestNotification — {} -> {tokenCount, successCount, failureCount}
+ * Sends a test push to every device the signed-in caller has registered,
+ * so each person can confirm notifications work on their own phone/browser
+ * (Settings → "Send test notification").
+ */
+exports.sendTestNotification = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign-in required");
+  const recipients = await collectRecipientTokens(db, { uid: request.auth.uid });
+  if (recipients.length === 0) {
+    return { tokenCount: 0, successCount: 0, failureCount: 0 };
+  }
+  const { successCount, failureCount } = await sendToTokens(recipients, { type: "test" });
+  return { tokenCount: recipients.length, successCount, failureCount };
+});

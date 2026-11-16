@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
@@ -110,6 +112,27 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 28),
           SectionHeader(
+            title: strings.sectionNotifications,
+            accentColor: AppStatusColors.info,
+          ),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    strings.notificationsExplainer,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  if (user != null) _TestNotificationButton(uid: user.uid),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          SectionHeader(
             title: strings.sectionProfile,
             accentColor: AppStatusColors.info,
           ),
@@ -161,6 +184,62 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Registers this device for push (asking permission if needed) and sends a
+/// test notification to every device the signed-in user has registered.
+class _TestNotificationButton extends ConsumerStatefulWidget {
+  const _TestNotificationButton({required this.uid});
+
+  final String uid;
+
+  @override
+  ConsumerState<_TestNotificationButton> createState() =>
+      _TestNotificationButtonState();
+}
+
+class _TestNotificationButtonState
+    extends ConsumerState<_TestNotificationButton> {
+  bool _sending = false;
+
+  Future<void> _send() async {
+    final strings = ref.read(appStringsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _sending = true);
+    String message;
+    try {
+      final outcome = await ref
+          .read(fcmTokenServiceProvider)
+          .sendTestNotification(widget.uid);
+      message = strings.testNotificationResult(outcome);
+    } catch (e) {
+      developer.log(
+        'sendTestNotification failed',
+        name: 'SettingsScreen',
+        error: e,
+      );
+      message = strings.testNotificationError;
+    }
+    if (!mounted) return;
+    setState(() => _sending = false);
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = ref.watch(appStringsProvider);
+    return FilledButton.tonalIcon(
+      onPressed: _sending ? null : _send,
+      icon: _sending
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.notifications_active_outlined),
+      label: Text(strings.sendTestNotificationButton),
     );
   }
 }

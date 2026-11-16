@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:jva_projecttracker/firebase_options.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunity_workspace_screen.dart';
@@ -52,8 +53,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 ///   own Notification Center already reflects new data live via Firestore
 ///   streams regardless, but a push arriving while the user is looking at a
 ///   different screen would otherwise be silently missed, so [initialize]
-///   listens for [FirebaseMessaging.onMessage] and surfaces a tappable
-///   [SnackBar] instead.
+///   listens for [FirebaseMessaging.onMessage] and surfaces a
+///   [MaterialBanner] with an "Open" button instead (iOS additionally shows
+///   its own system banner).
 ///
 /// A plain class rather than a Riverpod provider: nothing here depends on
 /// app state beyond the (already-global) [navigatorKey], and it must be
@@ -63,19 +65,52 @@ class PushNotificationService {
   Future<void> initialize({
     required GlobalKey<NavigatorState> navigatorKey,
   }) async {
+    // iOS hides notifications while the app is open unless told otherwise —
+    // show the system banner + sound in the foreground too, same as when
+    // backgrounded. No-op on Android/web.
+    await FirebaseMessaging.instance
+        .setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+
     FirebaseMessaging.onMessage.listen(
       (message) => _showForegroundBanner(message, navigatorKey),
     );
     FirebaseMessaging.onMessageOpenedApp.listen(
-      (message) => _navigate(message, navigatorKey),
+      (message) => _navigate(message.data, navigatorKey),
     );
 
     final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
     if (initialMessage != null) {
-      _navigate(initialMessage, navigatorKey);
+      _navigate(initialMessage.data, navigatorKey);
+      return;
+    }
+
+    // Web: a clicked browser notification opens the app at
+    // `/?opportunityId=...` (the push's webpush.fcmOptions.link — see
+    // functions/matchScorePushNotification.js), since the service worker
+    // can't use in-app routing itself.
+    if (kIsWeb) {
+      final webOpportunityId = opportunityIdFromMessageData(
+        Uri.base.queryParameters,
+      );
+      if (webOpportunityId != null) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _navigate(<String, dynamic>{
+            kNotificationDataOpportunityIdKey: webOpportunityId,
+          }, navigatorKey),
+        );
+      }
     }
   }
 
+  /// Android and web don't show a system notification while the app is
+  /// open, so a push arriving then is surfaced as a prominent in-app banner
+  /// at the top of the screen, with a button straight to the tender. (iOS
+  /// also shows its own system banner — see
+  /// setForegroundNotificationPresentationOptions above.)
   void _showForegroundBanner(
     RemoteMessage message,
     GlobalKey<NavigatorState> navigatorKey,
@@ -89,29 +124,56 @@ class PushNotificationService {
     if (messenger == null) return;
 
     final opportunityId = opportunityIdFromMessageData(message.data);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          notification.body == null
-              ? notification.title ?? ''
-              : '${notification.title ?? ''}\n${notification.body}',
+    final colors = Theme.of(context).colorScheme;
+    messenger.hideCurrentMaterialBanner();
+    messenger.showMaterialBanner(
+      MaterialBanner(
+        backgroundColor: colors.primaryContainer,
+        leading: Icon(
+          Icons.notifications_active,
+          color: colors.onPrimaryContainer,
         ),
-        action: opportunityId == null
-            ? null
-            : SnackBarAction(
-                label: 'View',
-                onPressed: () => _navigate(message, navigatorKey),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              notification.title ?? '',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: colors.onPrimaryContainer,
               ),
-        duration: const Duration(seconds: 6),
+            ),
+            if (notification.body != null)
+              Text(
+                notification.body!,
+                style: TextStyle(color: colors.onPrimaryContainer),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: messenger.hideCurrentMaterialBanner,
+            child: const Text('Dismiss'),
+          ),
+          if (opportunityId != null)
+            FilledButton(
+              onPressed: () {
+                messenger.hideCurrentMaterialBanner();
+                _navigate(message.data, navigatorKey);
+              },
+              child: const Text('Open'),
+            ),
+        ],
       ),
     );
   }
 
   void _navigate(
-    RemoteMessage message,
+    Map<String, dynamic> data,
     GlobalKey<NavigatorState> navigatorKey,
   ) {
-    final opportunityId = opportunityIdFromMessageData(message.data);
+    final opportunityId = opportunityIdFromMessageData(data);
     if (opportunityId == null) return;
 
     navigatorKey.currentState?.push(

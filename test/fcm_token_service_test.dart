@@ -241,4 +241,72 @@ void main() {
       expect(tokens.docs, isEmpty);
     },
   );
+
+  group('sendTestNotification', () {
+    FcmTokenService buildService({
+      AuthorizationStatus status = AuthorizationStatus.authorized,
+      String? token = 'token-abc',
+      Map<String, dynamic> callResult = const {
+        'tokenCount': 1,
+        'successCount': 1,
+        'failureCount': 0,
+      },
+      void Function()? onCall,
+    }) {
+      return FcmTokenService(
+        firestore: firestore,
+        requestPermission: () async => buildSettings(status),
+        getToken: () async => token,
+        onTokenRefresh: const Stream<String>.empty(),
+        callSendTestNotification: () async {
+          onCall?.call();
+          return callResult;
+        },
+      );
+    }
+
+    test('registers the device and reports sent on success', () async {
+      final outcome = await buildService().sendTestNotification('user-1');
+
+      expect(outcome, TestNotificationOutcome.sent);
+      final doc = await firestore
+          .collection('users')
+          .doc('user-1')
+          .collection('fcmTokens')
+          .doc('token-abc')
+          .get();
+      expect(doc.exists, isTrue);
+    });
+
+    test('reports permissionDenied without calling the function', () async {
+      var called = false;
+      final outcome = await buildService(
+        status: AuthorizationStatus.denied,
+        onCall: () => called = true,
+      ).sendTestNotification('user-1');
+
+      expect(outcome, TestNotificationOutcome.permissionDenied);
+      expect(called, isFalse);
+    });
+
+    test('reports noRegisteredDevice when no token is available', () async {
+      final outcome = await buildService(
+        token: null,
+      ).sendTestNotification('user-1');
+
+      expect(outcome, TestNotificationOutcome.noRegisteredDevice);
+    });
+
+    test('reports deliveryFailed when FCM rejects every device', () async {
+      final outcome = await buildService(
+        callResult: const {
+          'tokenCount': 2,
+          'successCount': 0,
+          'failureCount': 2,
+        },
+      ).sendTestNotification('user-1');
+
+      expect(outcome, TestNotificationOutcome.deliveryFailed);
+    });
+  });
 }

@@ -1,4 +1,7 @@
+import 'dart:developer' as developer;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -8,7 +11,31 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 /// silently resolves to null and no web device ever receives a push. Same
 /// "hardcoded public config value" convention as `main.dart`'s reCAPTCHA
 /// site key: not a secret, just identifies this app's key pair to FCM.
-const kFcmWebVapidKey = 'REPLACE_ME_FCM_WEB_VAPID_KEY';
+const kFcmWebVapidKey =
+    'BH8CI_iDTDm0W7AhqHKK5riT4j3mOlyyXMwMJ_yraA5K81COl3EASHQzh6hR_-Q0seAwRCnjwXL5nOx-4g4fIU0';
+
+/// True once [kFcmWebVapidKey] holds a real key rather than the placeholder.
+bool get isWebPushConfigured => !kFcmWebVapidKey.startsWith('REPLACE_ME');
+
+/// Outcome of [FcmTokenService.sendTestNotification], for the Settings
+/// screen to explain what happened.
+enum TestNotificationOutcome {
+  /// The push was accepted by FCM for at least one of the user's devices.
+  sent,
+
+  /// The user (or browser/OS) has blocked notifications for this app.
+  permissionDenied,
+
+  /// Web only: the VAPID key hasn't been configured, so this browser can't
+  /// register for push at all.
+  webPushNotConfigured,
+
+  /// Permission is granted but no device token could be registered.
+  noRegisteredDevice,
+
+  /// FCM rejected the send for every registered device.
+  deliveryFailed,
+}
 
 /// Requests notification permission, saves the device's FCM token so a
 /// server-side push (see `functions/matchScorePushNotification.js`) has
@@ -33,7 +60,9 @@ class FcmTokenService {
     Future<String?> Function()? getToken,
     Stream<String>? onTokenRefresh,
     Future<void> Function()? deleteToken,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+    Future<Map<String, dynamic>> Function()? callSendTestNotification,
+  }) : _callSendTestNotificationOverride = callSendTestNotification,
+       _firestore = firestore ?? FirebaseFirestore.instance,
        _requestPermission =
            requestPermission ?? FirebaseMessaging.instance.requestPermission,
        _getToken =
@@ -82,21 +111,65 @@ class FcmTokenService {
   /// is guarded elsewhere, but nothing here relies on that): the refresh
   /// listener is only ever attached once per [FcmTokenService] instance.
   Future<void> requestPermissionAndSaveToken(String uid) async {
+    await _registerDevice(uid);
+  }
+
+  /// Does the work of [requestPermissionAndSaveToken] and reports why
+  /// registration stopped, if it did. Returns null on success.
+  Future<TestNotificationOutcome?> _registerDevice(String uid) async {
     final settings = await _requestPermission();
     final authorized =
         settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional;
-    if (!authorized) return;
+    if (!authorized) return TestNotificationOutcome.permissionDenied;
+
+    // Without a real VAPID key the browser can't register for push at all;
+    // calling getToken would only throw. Skip quietly — see kFcmWebVapidKey.
+    if (kIsWeb && !isWebPushConfigured) {
+      developer.log(
+        'Web push disabled: kFcmWebVapidKey is still the placeholder.',
+        name: 'FcmTokenService',
+      );
+      return TestNotificationOutcome.webPushNotConfigured;
+    }
 
     final token = await _getToken();
-    if (token != null) {
-      await _saveToken(uid, token);
-    }
+    if (token == null) return TestNotificationOutcome.noRegisteredDevice;
+    await _saveToken(uid, token);
 
     if (!_refreshListenerAttached) {
       _refreshListenerAttached = true;
       _onTokenRefresh.listen((newToken) => _saveToken(uid, newToken));
     }
+    return null;
+  }
+
+  final Future<Map<String, dynamic>> Function()?
+  _callSendTestNotificationOverride;
+
+  Future<Map<String, dynamic>> _callSendTestNotification() async {
+    final override = _callSendTestNotificationOverride;
+    if (override != null) return override();
+    final result = await FirebaseFunctions.instance
+        .httpsCallable('sendTestNotification')
+        .call<Map<String, dynamic>>();
+    return Map<String, dynamic>.from(result.data);
+  }
+
+  /// Registers this device (asking for permission if needed), then asks the
+  /// `sendTestNotification` Cloud Function to push a test notification to
+  /// every device the signed-in user has registered. Lets each person confirm
+  /// alerts actually reach their phone/browser.
+  Future<TestNotificationOutcome> sendTestNotification(String uid) async {
+    final registrationProblem = await _registerDevice(uid);
+    if (registrationProblem != null) return registrationProblem;
+
+    final result = await _callSendTestNotification();
+    final tokenCount = (result['tokenCount'] as num?)?.toInt() ?? 0;
+    final successCount = (result['successCount'] as num?)?.toInt() ?? 0;
+    if (tokenCount == 0) return TestNotificationOutcome.noRegisteredDevice;
+    if (successCount == 0) return TestNotificationOutcome.deliveryFailed;
+    return TestNotificationOutcome.sent;
   }
 
   Future<void> _saveToken(String uid, String token) {

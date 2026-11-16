@@ -17,6 +17,7 @@ const {
   buildNotificationMessage,
   collectRecipientTokens,
   sendToTokens,
+  notifyAllUsers,
 } = require("./matchScorePushNotification");
 
 let passed = 0;
@@ -167,45 +168,85 @@ test("carries the opportunity id as a string data payload for client-side deep-l
   assert.deepEqual(message.data, { type: "matchScore", opportunityId: "opp-42" });
 });
 
-test("targets the default 'general' Android notification channel", () => {
+test("targets the 'general' Android channel at high priority so it shows as a heads-up banner", () => {
   const message = buildNotificationMessage("token-1", {
     opportunityTitle: "Tender",
     opportunityId: "opp-42",
     score: 80,
   });
   assert.equal(message.android.notification.channelId, "general");
+  assert.equal(message.android.priority, "high");
+});
+
+test("newOpportunity type uses 'New opportunity' copy with the score in the title", () => {
+  const message = buildNotificationMessage("token-1", {
+    type: "newOpportunity",
+    opportunityTitle: "Rosslyn compound roof replacement",
+    opportunityId: "opp-7",
+    score: 84,
+  });
+  assert.equal(message.notification.title, "New opportunity — 84% match");
+  assert.equal(message.notification.body, "Rosslyn compound roof replacement");
+  assert.deepEqual(message.data, { type: "newOpportunity", opportunityId: "opp-7" });
+});
+
+test("web push links to the hosted app with the opportunity id for deep-linking", () => {
+  const message = buildNotificationMessage("token-1", {
+    opportunityTitle: "Tender",
+    opportunityId: "opp 42",
+    score: 80,
+  });
+  assert.equal(
+    message.webpush.fcmOptions.link,
+    "https://jva-projecttracker.web.app/?opportunityId=opp%2042",
+  );
+  assert.equal(message.webpush.headers.Urgency, "high");
+});
+
+test("test type carries no opportunity id and links to the app root", () => {
+  const message = buildNotificationMessage("token-1", { type: "test" });
+  assert.deepEqual(message.data, { type: "test" });
+  assert.equal(message.webpush.fcmOptions.link, "https://jva-projecttracker.web.app/");
 });
 
 // --- collectRecipientTokens ------------------------------------------------
 
 /**
  * Minimal fake Firestore shaped exactly like collectRecipientTokens uses it:
- * db.collection("users").get() -> docs with .data() and .ref.collection(
- * "fcmTokens").get() -> docs with .id. [users] is a list of
- * {id, role, tokens: [tokenId, ...]}.
+ * db.collection("users").get() -> docs with .ref; .doc(uid) -> a ref;
+ * ref.collection("fcmTokens").get() -> docs with .id and .ref.delete().
+ * [users] is a list of {id, role, tokens: [tokenId, ...]}. Deleted token ids
+ * are recorded in the returned `deleted` array.
  */
 function fakeUsersDb(users) {
-  return {
-    collection(name) {
-      assert.equal(name, "users");
+  const deleted = [];
+  const userRef = (u) => ({
+    collection(sub) {
+      assert.equal(sub, "fcmTokens");
       return {
         async get() {
           return {
-            empty: users.length === 0,
-            docs: users.map((u) => ({
-              id: u.id,
-              data: () => ({ role: u.role }),
-              ref: {
-                collection(sub) {
-                  assert.equal(sub, "fcmTokens");
-                  return {
-                    async get() {
-                      return { docs: (u.tokens || []).map((t) => ({ id: t })) };
-                    },
-                  };
-                },
-              },
+            docs: (u.tokens || []).map((t) => ({
+              id: t,
+              ref: { async delete() { deleted.push(t); } },
             })),
+          };
+        },
+      };
+    },
+  });
+  return {
+    deleted,
+    collection(name) {
+      assert.equal(name, "users");
+      return {
+        doc(id) {
+          return userRef(users.find((u) => u.id === id) || { id, tokens: [] });
+        },
+        async get() {
+          return {
+            empty: users.length === 0,
+            docs: users.map((u) => ({ id: u.id, data: () => ({ role: u.role }), ref: userRef(u) })),
           };
         },
       };
@@ -213,50 +254,54 @@ function fakeUsersDb(users) {
   };
 }
 
+const tokensOf = (recipients) => recipients.map((r) => r.token).sort();
+
 (async () => {
   await asyncTest(
-    "collectRecipientTokens returns every admin's tokens when at least one admin exists",
+    "collectRecipientTokens returns every user's tokens regardless of role",
     async () => {
       const db = fakeUsersDb([
         { id: "u1", role: "admin", tokens: ["t1", "t2"] },
         { id: "u2", role: "user", tokens: ["t3"] },
       ]);
-
-      const tokens = await collectRecipientTokens(db);
-
-      assert.deepEqual(tokens.sort(), ["t1", "t2"]);
+      assert.deepEqual(tokensOf(await collectRecipientTokens(db)), ["t1", "t2", "t3"]);
     },
   );
 
   await asyncTest(
-    "collectRecipientTokens falls back to every user's tokens when there are no admins",
+    "collectRecipientTokens deduplicates a token saved under two accounts",
+    async () => {
+      const db = fakeUsersDb([
+        { id: "u1", role: "user", tokens: ["shared"] },
+        { id: "u2", role: "user", tokens: ["shared", "t2"] },
+      ]);
+      assert.deepEqual(tokensOf(await collectRecipientTokens(db)), ["shared", "t2"]);
+    },
+  );
+
+  await asyncTest(
+    "collectRecipientTokens with a uid returns only that user's tokens",
     async () => {
       const db = fakeUsersDb([
         { id: "u1", role: "user", tokens: ["t1"] },
         { id: "u2", role: "user", tokens: ["t2"] },
       ]);
-
-      const tokens = await collectRecipientTokens(db);
-
-      assert.deepEqual(tokens.sort(), ["t1", "t2"]);
+      assert.deepEqual(tokensOf(await collectRecipientTokens(db, { uid: "u2" })), ["t2"]);
     },
   );
 
   await asyncTest(
     "collectRecipientTokens returns [] when the users collection is empty",
     async () => {
-      const db = fakeUsersDb([]);
-      const tokens = await collectRecipientTokens(db);
-      assert.deepEqual(tokens, []);
+      assert.deepEqual(await collectRecipientTokens(fakeUsersDb([])), []);
     },
   );
 
   await asyncTest(
-    "collectRecipientTokens returns [] when admins exist but none have saved a token",
+    "collectRecipientTokens returns [] when users exist but none have saved a token",
     async () => {
       const db = fakeUsersDb([{ id: "u1", role: "admin", tokens: [] }]);
-      const tokens = await collectRecipientTokens(db);
-      assert.deepEqual(tokens, []);
+      assert.deepEqual(await collectRecipientTokens(db), []);
     },
   );
 
@@ -272,13 +317,7 @@ function fakeUsersDb(users) {
           return { responses: [], successCount: 0, failureCount: 0 };
         },
       };
-
-      const result = await sendToTokens(
-        [],
-        { opportunityTitle: "Tender", score: 80 },
-        fakeMessaging,
-      );
-
+      const result = await sendToTokens([], { opportunityTitle: "Tender", score: 80 }, fakeMessaging);
       assert.equal(called, false);
       assert.deepEqual(result, { successCount: 0, failureCount: 0 });
     },
@@ -298,13 +337,11 @@ function fakeUsersDb(users) {
           };
         },
       };
-
       const result = await sendToTokens(
-        ["t1", "t2"],
+        [{ token: "t1" }, { token: "t2" }],
         { opportunityTitle: "Tender", score: 80 },
         fakeMessaging,
       );
-
       assert.equal(receivedMessages.length, 2);
       assert.equal(receivedMessages[0].token, "t1");
       assert.equal(receivedMessages[1].token, "t2");
@@ -313,28 +350,73 @@ function fakeUsersDb(users) {
   );
 
   await asyncTest(
-    "sendToTokens does not throw when an individual token fails to deliver — logs and reports the failure count",
+    "sendToTokens deletes tokens FCM reports as unregistered, but keeps tokens with transient errors",
     async () => {
+      const deleted = [];
+      const ref = (t) => ({ async delete() { deleted.push(t); } });
       const fakeMessaging = {
-        async sendEach(messages) {
+        async sendEach() {
           return {
             responses: [
               { success: true },
               { success: false, error: { code: "messaging/registration-token-not-registered" } },
+              { success: false, error: { code: "messaging/internal-error" } },
             ],
             successCount: 1,
-            failureCount: 1,
+            failureCount: 2,
           };
         },
       };
-
       const result = await sendToTokens(
-        ["t1", "t2-stale"],
+        [
+          { token: "ok", ref: ref("ok") },
+          { token: "stale", ref: ref("stale") },
+          { token: "flaky", ref: ref("flaky") },
+        ],
         { opportunityTitle: "Tender", score: 80 },
         fakeMessaging,
       );
+      assert.deepEqual(result, { successCount: 1, failureCount: 2 });
+      assert.deepEqual(deleted, ["stale"]);
+    },
+  );
 
-      assert.deepEqual(result, { successCount: 1, failureCount: 1 });
+  // --- notifyAllUsers ------------------------------------------------------
+
+  await asyncTest(
+    "notifyAllUsers sends a newOpportunity push to every user's devices",
+    async () => {
+      const db = fakeUsersDb([
+        { id: "u1", role: "admin", tokens: ["t1"] },
+        { id: "u2", role: "user", tokens: ["t2"] },
+      ]);
+      let sent;
+      const fakeMessaging = {
+        async sendEach(messages) {
+          sent = messages;
+          return { responses: messages.map(() => ({ success: true })), successCount: messages.length, failureCount: 0 };
+        },
+      };
+      const result = await notifyAllUsers(
+        { type: "newOpportunity", opportunityId: "opp-1", opportunityTitle: "Tender", score: 90 },
+        { firestoreDb: db, messagingClient: fakeMessaging },
+      );
+      assert.deepEqual(result, { successCount: 2, failureCount: 0 });
+      assert.deepEqual(sent.map((m) => m.token).sort(), ["t1", "t2"]);
+      assert.equal(sent[0].data.type, "newOpportunity");
+    },
+  );
+
+  await asyncTest(
+    "notifyAllUsers never throws when messaging fails outright",
+    async () => {
+      const db = fakeUsersDb([{ id: "u1", role: "user", tokens: ["t1"] }]);
+      const fakeMessaging = { async sendEach() { throw new Error("FCM down"); } };
+      const result = await notifyAllUsers(
+        { type: "newOpportunity", opportunityId: "opp-1", score: 90 },
+        { firestoreDb: db, messagingClient: fakeMessaging },
+      );
+      assert.deepEqual(result, { successCount: 0, failureCount: 0 });
     },
   );
 

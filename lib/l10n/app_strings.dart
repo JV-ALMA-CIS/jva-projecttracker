@@ -10,6 +10,7 @@ import 'package:jva_projecttracker/models/library_document.dart';
 import 'package:jva_projecttracker/models/tender_source.dart';
 import 'package:jva_projecttracker/models/tender_sync_run.dart';
 import 'package:jva_projecttracker/services/document_suggestions.dart';
+import 'package:jva_projecttracker/services/fcm_token_service.dart';
 import 'package:jva_projecttracker/services/knowledge_health.dart';
 import 'package:jva_projecttracker/services/proposal_readiness.dart';
 import 'package:jva_projecttracker/services/proposal_section_suggestions.dart';
@@ -1415,6 +1416,47 @@ class AppStrings {
   String get signedInAs => _it ? 'Accesso effettuato come' : 'Signed in as';
   String get roleLabel => _it ? 'Ruolo' : 'Role';
   String get signOutButton => _it ? 'Esci' : 'Sign out';
+
+  // Settings — push notifications
+  String get sectionNotifications => _it ? 'Notifiche' : 'Notifications';
+  String get notificationsExplainer => _it
+      ? 'Ricevi un avviso su questo dispositivo quando viene trovata una nuova '
+            'opportunità con corrispondenza pari o superiore al 70%.'
+      : 'Get an alert on this device whenever a new opportunity with a '
+            '70%+ match is found.';
+  String get sendTestNotificationButton =>
+      _it ? 'Invia notifica di prova' : 'Send test notification';
+  String testNotificationResult(TestNotificationOutcome outcome) {
+    switch (outcome) {
+      case TestNotificationOutcome.sent:
+        return _it
+            ? 'Notifica di prova inviata — dovrebbe apparire a breve.'
+            : 'Test notification sent — it should appear shortly.';
+      case TestNotificationOutcome.permissionDenied:
+        return _it
+            ? 'Le notifiche sono bloccate. Consentile nelle impostazioni del '
+                  'dispositivo o del browser e riprova.'
+            : 'Notifications are blocked. Allow them in your device or '
+                  'browser settings, then try again.';
+      case TestNotificationOutcome.webPushNotConfigured:
+        return _it
+            ? 'Le notifiche web non sono ancora configurate (chiave VAPID '
+                  'mancante).'
+            : 'Web notifications are not configured yet (missing VAPID key).';
+      case TestNotificationOutcome.noRegisteredDevice:
+        return _it
+            ? 'Impossibile registrare questo dispositivo per le notifiche.'
+            : 'This device could not be registered for notifications.';
+      case TestNotificationOutcome.deliveryFailed:
+        return _it
+            ? 'Invio non riuscito. Riprova più tardi.'
+            : 'The notification could not be delivered. Try again later.';
+    }
+  }
+
+  String get testNotificationError => _it
+      ? 'Errore durante l\'invio della notifica di prova.'
+      : 'Something went wrong sending the test notification.';
 
   // Auth
   String get fieldEmail => _it ? 'Email' : 'Email';

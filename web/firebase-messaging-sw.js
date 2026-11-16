@@ -30,36 +30,14 @@ firebase.initializeApp({
   storageBucket: "jva-projecttracker.firebasestorage.app",
 });
 
-const messaging = firebase.messaging();
-
-// Background/closed-tab display: FCM's `notification` payload is normally
-// shown automatically by the browser, but Chrome only does this reliably
-// when a service worker explicitly handles `onBackgroundMessage` — without
-// it, some browsers silently drop the notification instead of showing it.
-// Clicking it focuses/opens the app; the deep link itself (which opportunity
-// to open) is handled app-side via `onMessageOpenedApp`/`getInitialMessage`
-// in push_notification_service.dart once the data payload's `opportunityId`
-// reaches the running app, since a service worker cannot use app routing.
-messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title || "JVA Project Tracker";
-  const body = payload.notification?.body;
-  self.registration.showNotification(title, {
-    body,
-    icon: "/icons/Icon-192.png",
-    data: payload.data,
-  });
-});
-
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clientList) => {
-        for (const client of clientList) {
-          if ("focus" in client) return client.focus();
-        }
-        if (self.clients.openWindow) return self.clients.openWindow("/");
-      }),
-  );
-});
+// Initializing messaging is all this file needs to do. For pushes that carry
+// a `notification` payload (every push this app sends — see
+// functions/matchScorePushNotification.js buildNotificationMessage), the
+// Firebase SDK displays the notification itself and, on click, opens/focuses
+// `webpush.fcmOptions.link` (the app URL with ?opportunityId=..., which
+// PushNotificationService reads on startup to deep-link).
+//
+// Do NOT add an onBackgroundMessage handler that calls showNotification, or
+// a custom notificationclick listener: the SDK already does both, so every
+// push would be shown twice and clicks would open duplicate windows.
+firebase.messaging();
