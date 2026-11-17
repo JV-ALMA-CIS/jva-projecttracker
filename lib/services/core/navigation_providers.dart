@@ -16,3 +16,36 @@ final selectedTabIndexProvider =
     NotifierProvider<SelectedTabIndexController, int>(
       SelectedTabIndexController.new,
     );
+
+/// HomeShell tab index of Opportunities.
+const kOpportunitiesTabIndex = 2;
+
+/// Inner tab index of the Inbox on the Opportunities screen.
+const kOpportunitiesInboxTab = 1;
+
+/// A one-off request for the Opportunities screen to switch to an inner
+/// tab (e.g. tapping the weekly-summary push opens the Inbox). The screen
+/// consumes it and clears it.
+class RequestedOpportunitiesTabController extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void request(int tab) => state = tab;
+
+  void clear() => state = null;
+}
+
+final requestedOpportunitiesTabProvider =
+    NotifierProvider<RequestedOpportunitiesTabController, int?>(
+      RequestedOpportunitiesTabController.new,
+    );
+
+/// Shows the Opportunity Inbox: switches to the Opportunities tab and asks
+/// it to open its Inbox tab.
+void openOpportunityInbox(ProviderContainer container) {
+  container.read(selectedTabIndexProvider.notifier).index =
+      kOpportunitiesTabIndex;
+  container
+      .read(requestedOpportunitiesTabProvider.notifier)
+      .request(kOpportunitiesInboxTab);
+}

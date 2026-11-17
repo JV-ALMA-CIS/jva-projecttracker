@@ -2,6 +2,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jva_projecttracker/services/core/navigation_providers.dart';
 import 'package:jva_projecttracker/firebase_options.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunity_workspace_screen.dart';
 
@@ -93,6 +95,12 @@ class PushNotificationService {
     // functions/matchScorePushNotification.js), since the service worker
     // can't use in-app routing itself.
     if (kIsWeb) {
+      if (Uri.base.queryParameters['open'] == 'inbox') {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _navigate(const {'open': 'inbox'}, navigatorKey),
+        );
+        return;
+      }
       final webOpportunityId = opportunityIdFromMessageData(
         Uri.base.queryParameters,
       );
@@ -124,6 +132,7 @@ class PushNotificationService {
     if (messenger == null) return;
 
     final opportunityId = opportunityIdFromMessageData(message.data);
+    final canOpen = opportunityId != null || message.data['open'] == 'inbox';
     final colors = Theme.of(context).colorScheme;
     messenger.hideCurrentMaterialBanner();
     messenger.showMaterialBanner(
@@ -156,7 +165,7 @@ class PushNotificationService {
             onPressed: messenger.hideCurrentMaterialBanner,
             child: const Text('Dismiss'),
           ),
-          if (opportunityId != null)
+          if (canOpen)
             FilledButton(
               onPressed: () {
                 messenger.hideCurrentMaterialBanner();
@@ -173,6 +182,15 @@ class PushNotificationService {
     Map<String, dynamic> data,
     GlobalKey<NavigatorState> navigatorKey,
   ) {
+    // Weekly summary: back to the main screen, on the Opportunity Inbox.
+    if (data['open'] == 'inbox') {
+      final context = navigatorKey.currentContext;
+      if (context == null) return;
+      navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      openOpportunityInbox(ProviderScope.containerOf(context, listen: false));
+      return;
+    }
+
     final opportunityId = opportunityIdFromMessageData(data);
     if (opportunityId == null) return;
 

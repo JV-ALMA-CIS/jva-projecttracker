@@ -87,8 +87,14 @@ function shortDate(iso) {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Nairobi" });
 }
 
-function notificationCopy(type, { opportunityTitle, score, kind, daysLeft, deadline, sharedByName, note, justAdded }) {
+function notificationCopy(
+  type,
+  { opportunityTitle, score, kind, daysLeft, deadline, sharedByName, note, justAdded, summaryTitle, summaryBody },
+) {
   const title = opportunityTitle || "An opportunity";
+  if (type === "weeklySummary") {
+    return { title: summaryTitle || "Weekly summary", body: summaryBody || "" };
+  }
   if (type === "teamShare") {
     const who = sharedByName || "A colleague";
     const kindWord = KIND_WORDS[kind] || "opportunity";
@@ -149,7 +155,20 @@ function notificationCopy(type, { opportunityTitle, score, kind, daysLeft, deadl
  */
 function buildNotificationMessage(
   token,
-  { opportunityTitle, opportunityId, score, kind, daysLeft, deadline, sharedByName, note, justAdded, type = "matchScore" },
+  {
+    opportunityTitle,
+    opportunityId,
+    score,
+    kind,
+    daysLeft,
+    deadline,
+    sharedByName,
+    note,
+    justAdded,
+    summaryTitle,
+    summaryBody,
+    type = "matchScore",
+  },
 ) {
   const { title, body } = notificationCopy(type, {
     opportunityTitle,
@@ -160,9 +179,16 @@ function buildNotificationMessage(
     sharedByName,
     note,
     justAdded,
+    summaryTitle,
+    summaryBody,
   });
   const data = { type };
   let link = WEB_APP_URL;
+  // The weekly summary opens the Opportunity Inbox (app: data.open; web: ?open=inbox).
+  if (type === "weeklySummary") {
+    data.open = "inbox";
+    link = `${WEB_APP_URL}?open=inbox`;
+  }
   if (opportunityId != null) {
     data.opportunityId = String(opportunityId);
     link = `${WEB_APP_URL}?opportunityId=${encodeURIComponent(String(opportunityId))}`;

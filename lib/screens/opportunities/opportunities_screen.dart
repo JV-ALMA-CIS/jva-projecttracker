@@ -66,6 +66,22 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
   bool _findingGrants = false;
 
   @override
+  void initState() {
+    super.initState();
+    // A request made before this screen existed (e.g. the app was opened
+    // from the weekly-summary push) — honour it once built.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final requested = ref.read(requestedOpportunitiesTabProvider);
+      if (requested != null) _showRequestedTab(requested);
+    });
+  }
+
+  void _showRequestedTab(int tab) {
+    if (tab >= 0 && tab < _tabController.length) _tabController.animateTo(tab);
+    ref.read(requestedOpportunitiesTabProvider.notifier).clear();
+  }
+
+  @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
@@ -220,6 +236,9 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int?>(requestedOpportunitiesTabProvider, (_, next) {
+      if (next != null) _showRequestedTab(next);
+    });
     final strings = ref.watch(appStringsProvider);
     final isAdmin =
         ref.watch(currentUserProfileProvider).value?.role == UserRole.admin;

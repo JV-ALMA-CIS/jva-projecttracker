@@ -1685,6 +1685,16 @@ exports.cleanupPublicBuyers = onCall({ timeoutSeconds: 540 }, async () => {
   });
 });
 
+// Monday-morning summary push — see weeklySummary.js.
+const weeklySummary = require("./weeklySummary");
+exports.scheduledWeeklySummary = weeklySummary.scheduledWeeklySummary;
+
+/** Callable: previewWeeklySummary -> { summary, copy } — shows this week's summary WITHOUT sending it. */
+exports.previewWeeklySummary = onCall(async () => {
+  const { summary, copy } = await weeklySummary.sendWeeklySummary({ db, dryRun: true });
+  return { summary, copy };
+});
+
 // Team sharing — see teamShare.js.
 exports.shareOpportunityWithTeam = require("./teamShare").shareOpportunityWithTeam;
 

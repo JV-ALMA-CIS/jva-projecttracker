@@ -1,0 +1,83 @@
+/**
+ * Plain-Node assertion tests for weeklySummary.js. Run with:
+ *   node functions/weeklySummary.test.js
+ */
+const assert = require("node:assert/strict");
+const { computeWeeklySummary, summaryCopy } = require("./weeklySummary");
+const { buildNotificationMessage } = require("./matchScorePushNotification");
+
+let passed = 0;
+function test(name, fn) {
+  try {
+    fn();
+    passed += 1;
+    console.log(`  ok - ${name}`);
+  } catch (e) {
+    console.error(`  FAIL - ${name}`);
+    console.error(e);
+    process.exitCode = 1;
+  }
+}
+
+console.log("weeklySummary.test.js");
+
+const NOW = new Date("2026-11-23T06:30:00Z"); // Monday 09:30 Nairobi
+const daysAgo = (n) => new Date(NOW.getTime() - n * 86400000);
+const inDays = (n) => new Date(NOW.getTime() + n * 86400000);
+const units = new Map([["bu-c", "Construction"], ["bu-fm", "Facility Management"], ["bu-it", "Information Technology"]]);
+
+const opps = [
+  { kind: "tender", status: "discovered", discoveredAt: daysAgo(1), businessUnitIds: ["bu-c"], fitScorePercent: 82 },
+  { kind: "tender", status: "discovered", discoveredAt: daysAgo(2), businessUnitIds: ["bu-c", "bu-fm"], fitScorePercent: 60 },
+  { kind: "tender", status: "discovered", discoveredAt: daysAgo(3), businessUnitIds: ["bu-it"], fitScorePercent: 55 },
+  { kind: "grant", status: "discovered", discoveredAt: daysAgo(4), fitScorePercent: 75, deadline: inDays(3) },
+  { kind: "programme", status: "discovered", discoveredAt: daysAgo(5), fitScorePercent: 40 },
+  // Not counted: older than a week, or archived by the buyer policy.
+  { kind: "tender", status: "discovered", discoveredAt: daysAgo(9), businessUnitIds: ["bu-c"], fitScorePercent: 90 },
+  { kind: "tender", status: "archived", discoveredAt: daysAgo(1), businessUnitIds: ["bu-c"], fitScorePercent: 90 },
+  // Older item still open, closing this week, being reviewed.
+  { kind: "tender", status: "reviewing", discoveredAt: daysAgo(20), fitScorePercent: 30, deadline: inDays(5) },
+];
+
+test("counts the past week's opportunities by kind and top business units", () => {
+  const s = computeWeeklySummary({ opportunities: opps, unitNames: units, shareCount: 2, now: NOW });
+  assert.equal(s.total, 5);
+  assert.deepEqual(s.byKind, { tender: 3, grant: 1, programme: 1 });
+  assert.deepEqual(s.topUnits[0], ["Construction", 2]);
+  assert.equal(s.strongMatches, 2);
+  assert.equal(s.closingThisWeek, 2);
+  assert.equal(s.shareCount, 2);
+});
+
+test("builds a readable one-line summary", () => {
+  const s = computeWeeklySummary({ opportunities: opps, unitNames: units, shareCount: 2, now: NOW });
+  const copy = summaryCopy(s);
+  assert.equal(copy.title, "This week: 5 new opportunities");
+  assert.equal(
+    copy.body,
+    "Tenders 3 (Construction 2, Facility Management 1, Information Technology 1) · Grants 1 · Programmes 1 · 2 strong matches · 2 closing this week · 2 shared by the team",
+  );
+});
+
+test("sends nothing in a completely empty week", () => {
+  const s = computeWeeklySummary({ opportunities: [], now: NOW });
+  assert.equal(summaryCopy(s), null);
+});
+
+test("singular wording for one opportunity", () => {
+  const s = computeWeeklySummary({
+    opportunities: [{ kind: "grant", status: "discovered", discoveredAt: daysAgo(1), fitScorePercent: 20 }],
+    now: NOW,
+  });
+  assert.equal(summaryCopy(s).title, "This week: 1 new opportunity");
+});
+
+test("the push opens the Inbox (app data + web link)", () => {
+  const m = buildNotificationMessage("t", { type: "weeklySummary", summaryTitle: "This week: 5 new opportunities", summaryBody: "Tenders 3" });
+  assert.equal(m.notification.title, "This week: 5 new opportunities");
+  assert.equal(m.notification.body, "Tenders 3");
+  assert.equal(m.data.open, "inbox");
+  assert.equal(m.webpush.fcmOptions.link, "https://jva-projecttracker.web.app/?open=inbox");
+});
+
+console.log(`\n${passed} test(s) passed`);
