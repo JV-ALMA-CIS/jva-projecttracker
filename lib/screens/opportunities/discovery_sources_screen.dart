@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
@@ -394,9 +396,11 @@ class _ManualOpportunityDialogState
         .where((t) => t.isNotEmpty)
         .toList();
 
-    await ref
+    final uid = ref.read(authStateChangesProvider).value?.uid;
+    final newId = await ref
         .read(opportunityServiceProvider)
         .create(
+          extraFields: {'addedByUid': ?uid},
           Opportunity(
             id: '',
             title: title,
@@ -421,6 +425,15 @@ class _ManualOpportunityDialogState
             discoverySourceType: DiscoverySourceType.manual,
           ),
         );
+
+    // Tell everyone someone added it — that's how the office hears about
+    // opportunities spotted outside the automatic searches. Best-effort:
+    // the opportunity is already saved even if the push fails.
+    try {
+      await ref.read(teamShareServiceProvider).share(newId, justAdded: true);
+    } catch (e) {
+      developer.log('Announcing manual add failed', error: e);
+    }
 
     if (mounted) Navigator.of(context).pop();
   }

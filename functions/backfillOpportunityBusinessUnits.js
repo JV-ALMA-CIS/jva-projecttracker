@@ -178,4 +178,87 @@ const backfillOpportunityBusinessUnits = onCall(
   },
 );
 
-module.exports = { backfillOpportunityBusinessUnits };
+/**
+ * The business-unit catalog, cached per function instance for 10 minutes
+ * so a burst of new opportunities doesn't re-read it every time.
+ */
+let catalogCache = null;
+async function loadCatalog() {
+  if (catalogCache && Date.now() - catalogCache.at < 10 * 60 * 1000) return catalogCache;
+  const snap = await db().collection("businessUnits").get();
+  const businessUnits = snap.docs.map((d) => ({ id: d.id, name: d.data().name, slug: d.data().slug }));
+  catalogCache = {
+    at: Date.now(),
+    catalog: buildBusinessUnitCatalog(businessUnits),
+    names: businessUnits.map((b) => b.name).filter(Boolean),
+  };
+  return catalogCache;
+}
+
+/**
+ * Assigns business unit(s) to one opportunity with the same AI prompt the
+ * admin backfill uses, and records that it was checked
+ * (`businessUnitCheckedAt`) — so an opportunity that genuinely fits no unit
+ * isn't re-asked every run. Returns the assigned ids ([] when none fit).
+ * Throws on AI failure (left unchecked, so it's retried later).
+ */
+async function assignBusinessUnitsToOpportunity(ref, opportunity) {
+  const { catalog, names } = await loadCatalog();
+  if (names.length === 0) return [];
+  const chosen = await classifyOneOpportunity(
+    buildBackfillPrompt({
+      title: opportunity.title,
+      client: opportunity.client,
+      description: opportunity.description,
+      category: opportunity.opportunityType || opportunity.kind,
+      tenderSourceCategory: opportunity.tenderSourceCategory,
+      tags: opportunity.tags,
+      businessUnitNames: names,
+    }),
+  );
+  const { ids } = matchBusinessUnitNames(chosen, catalog);
+  const update = { businessUnitCheckedAt: admin.firestore.Timestamp.now() };
+  if (ids.length > 0) update.businessUnitIds = ids;
+  await ref.update(update);
+  return ids;
+}
+
+/** Whether an opportunity still needs a business-unit check. */
+function needsBusinessUnits(opportunity) {
+  const ids = opportunity.businessUnitIds;
+  return (!Array.isArray(ids) || ids.length === 0) && !opportunity.businessUnitCheckedAt;
+}
+
+/**
+ * Background sorter: assigns business units to up to [limit] opportunities
+ * that don't have any yet (oldest imports included). Runs every 30
+ * minutes, so everything already in the platform gets sorted without
+ * anyone pressing a button.
+ */
+async function runBusinessUnitBackfillBatch(limit = MAX_BATCH_SIZE) {
+  const snap = await db().collection("opportunities").get();
+  const pending = snap.docs.filter((d) => needsBusinessUnits(d.data()));
+  let assigned = 0;
+  let none = 0;
+  let errors = 0;
+  for (const doc of pending.slice(0, limit)) {
+    try {
+      const ids = await assignBusinessUnitsToOpportunity(doc.ref, doc.data());
+      if (ids.length > 0) assigned += 1;
+      else none += 1;
+    } catch (e) {
+      logger.error(`runBusinessUnitBackfillBatch: failed for ${doc.id}`, e);
+      errors += 1;
+    }
+  }
+  const result = { assigned, none, errors, remaining: Math.max(0, pending.length - limit) };
+  logger.info(`runBusinessUnitBackfillBatch: ${JSON.stringify(result)}`);
+  return result;
+}
+
+module.exports = {
+  backfillOpportunityBusinessUnits,
+  assignBusinessUnitsToOpportunity,
+  runBusinessUnitBackfillBatch,
+  needsBusinessUnits,
+};

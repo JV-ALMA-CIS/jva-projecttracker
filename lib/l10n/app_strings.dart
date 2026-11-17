@@ -764,6 +764,41 @@ class AppStrings {
   // Opportunity Discovery Engine (Milestone 3.7)
   String get inboxTitle => _it ? 'Posta in arrivo' : 'Opportunity Inbox';
   String get inboxAllBusinessUnits => _it ? 'Tutte' : 'All';
+
+  // Share with team
+  String get shareWithTeamButton =>
+      _it ? 'Condividi con il team' : 'Share with team';
+  String get shareButtonShort => _it ? 'Condividi' : 'Share';
+  String get shareWithTeamExplainer => _it
+      ? 'Tutti riceveranno una notifica su telefono e browser.'
+      : 'Everyone gets a notification on their phone and browser.';
+  String get shareNoteHint => _it
+      ? 'Aggiungi una nota (facoltativa) — es. "Adatto ai nostri progetti scolastici"'
+      : 'Add a note (optional) — e.g. "Fits our school projects"';
+  String get copyLinkButton => _it ? 'Copia link' : 'Copy link';
+  String get linkCopiedMessage => _it
+      ? 'Link copiato — incollalo su WhatsApp o email.'
+      : 'Link copied — paste it into WhatsApp or email.';
+  String sharedWithTeamMessage(int recipients) => _it
+      ? 'Condiviso con il team ($recipients dispositivi).'
+      : 'Shared with the team ($recipients devices).';
+  String get sharedByTeamGroupLabel =>
+      _it ? 'Condiviso dal team' : 'Shared by the team';
+  String teamShareSubtitle(String who, String note, {bool justAdded = false}) {
+    final action = justAdded
+        ? (_it ? 'ha aggiunto' : 'added this')
+        : (_it ? 'ha condiviso' : 'shared this');
+    final name = who.isEmpty ? (_it ? 'Un collega' : 'A colleague') : who;
+    return note.isEmpty ? '$name $action' : '$name $action: "$note"';
+  }
+
+  // Settings — your name
+  String get yourNameLabel => _it ? 'Il tuo nome' : 'Your name';
+  String get yourNameHelper => _it
+      ? 'Mostrato ai colleghi quando condividi un\'opportunità.'
+      : 'Shown to colleagues when you share an opportunity.';
+  String get saveButtonShort => _it ? 'Salva' : 'Save';
+  String get nameSavedMessage => _it ? 'Nome salvato.' : 'Name saved.';
   String get inboxSliceEmpty => _it
       ? 'Niente da valutare qui al momento.'
       : 'Nothing to review here right now.';

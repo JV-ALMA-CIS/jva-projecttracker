@@ -1639,8 +1639,29 @@ exports.backfillSourceUrlVerification = backfillSourceUrlVerification;
 const { seedCompanyBusinessUnits } = require("./seedCompanyBusinessUnits");
 exports.seedCompanyBusinessUnits = seedCompanyBusinessUnits;
 
-const { backfillOpportunityBusinessUnits } = require("./backfillOpportunityBusinessUnits");
+const {
+  backfillOpportunityBusinessUnits,
+  assignBusinessUnitsToOpportunity,
+  runBusinessUnitBackfillBatch,
+  needsBusinessUnits,
+} = require("./backfillOpportunityBusinessUnits");
 exports.backfillOpportunityBusinessUnits = backfillOpportunityBusinessUnits;
+
+/** Every 30 minutes: give business units to opportunities that have none yet. */
+exports.scheduledBusinessUnitBackfill = onSchedule(
+  { schedule: "every 30 minutes", timeZone: "Africa/Nairobi", timeoutSeconds: 540 },
+  async () => {
+    await runBusinessUnitBackfillBatch();
+  },
+);
+
+/** Callable: runBusinessUnitBackfillNow -> { assigned, none, errors, remaining } */
+exports.runBusinessUnitBackfillNow = onCall({ timeoutSeconds: 540 }, async () => {
+  return runBusinessUnitBackfillBatch();
+});
+
+// Team sharing — see teamShare.js.
+exports.shareOpportunityWithTeam = require("./teamShare").shareOpportunityWithTeam;
 
 const { cleanupOffRegionOpportunities } = require("./cleanupOffRegionOpportunities");
 exports.cleanupOffRegionOpportunities = cleanupOffRegionOpportunities;
@@ -3702,35 +3723,61 @@ exports.onOpportunityCreated = onDocumentCreated(
     const opportunity = event.data?.data();
     if (!opportunity) return;
     const opportunityId = event.params.opportunityId;
-    // Bulk/quiet imports (e.g. the first EU catalogue import) are already
-    // scored and must not push one alert per item.
-    if (opportunity.suppressNotification === true) return;
 
-    const score = matchNotifyScoreFor(opportunity);
-    if (score != null) {
-      await notifyAllUsers({
-        type: "newOpportunity",
-        opportunityId,
-        opportunityTitle: opportunity.title,
-        score,
-        kind: opportunity.kind,
-      });
-      return;
-    }
-
-    if (!isUnscoredOpportunity(opportunity)) return;
-    if (["won", "lost", "dismissed"].includes(opportunity.status)) return;
+    // Every new opportunity — whatever its source — gets its business
+    // unit(s), so it lands under the right Inbox chip. Runs alongside the
+    // alert/scoring work below; a failure is retried by the 30-minute
+    // background sorter (scheduledBusinessUnitBackfill).
+    const unitsAssigned = needsBusinessUnits(opportunity)
+      ? assignBusinessUnitsToOpportunity(event.data.ref, opportunity).catch((e) =>
+        logger.error(`onOpportunityCreated: business-unit assignment failed for ${opportunityId}`, e),
+      )
+      : Promise.resolve();
 
     try {
-      const { result } = await runMatchAnalysis(event.data.ref, opportunity);
-      logger.info(
-        `onOpportunityCreated: auto-scored ${opportunityId} at ${result.overallMatchScore ?? "n/a"}%`,
-      );
-    } catch (e) {
-      logger.error(`onOpportunityCreated: auto Match Analysis failed for ${opportunityId}`, e);
+      await alertOrScoreNewOpportunity(event, opportunity, opportunityId);
+    } finally {
+      await unitsAssigned;
     }
   },
 );
+
+/**
+ * The alert / auto-scoring half of onOpportunityCreated:
+ * - bulk/quiet imports: nothing (already scored, no per-item alerts);
+ * - added by hand (`addedByUid`): the person's "share with team" already
+ *   told everyone, so only score it (no second push);
+ * - already scored >= threshold: push "New opportunity" to everyone;
+ * - unscored: run Match Analysis; a qualifying score pushes via
+ *   onOpportunityMatchScoreUpdated.
+ */
+async function alertOrScoreNewOpportunity(event, opportunity, opportunityId) {
+  if (opportunity.suppressNotification === true) return;
+
+  const score = matchNotifyScoreFor(opportunity);
+  if (score != null && !opportunity.addedByUid) {
+    await notifyAllUsers({
+      type: "newOpportunity",
+      opportunityId,
+      opportunityTitle: opportunity.title,
+      score,
+      kind: opportunity.kind,
+    });
+    return;
+  }
+
+  if (!isUnscoredOpportunity(opportunity)) return;
+  if (["won", "lost", "dismissed"].includes(opportunity.status)) return;
+
+  try {
+    const { result } = await runMatchAnalysis(event.data.ref, opportunity);
+    logger.info(
+      `onOpportunityCreated: auto-scored ${opportunityId} at ${result.overallMatchScore ?? "n/a"}%`,
+    );
+  } catch (e) {
+    logger.error(`onOpportunityCreated: auto Match Analysis failed for ${opportunityId}`, e);
+  }
+}
 
 /**
  * Callable: sendTestNotification — {} -> {tokenCount, successCount, failureCount}

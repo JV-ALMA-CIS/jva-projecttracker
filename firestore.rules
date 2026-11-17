@@ -94,6 +94,14 @@ service cloud.firestore {
     // Append-only pipeline history — see OpportunityService.transitionStage.
     // No client update/delete: events are a factual record of what
     // happened, so they should never be edited or removed once written.
+    // "Share with team" announcements, written only by the
+    // shareOpportunityWithTeam Cloud Function (Admin SDK). Everyone reads
+    // them in their Notifications tab; no client writes.
+    match /teamShares/{shareId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
     match /opportunityEvents/{eventId} {
       allow read, create: if isAuthenticated();
       allow update, delete: if false;

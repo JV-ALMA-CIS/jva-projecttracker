@@ -1,6 +1,7 @@
 import 'package:jva_projecttracker/models/notification_item.dart';
 import 'package:jva_projecttracker/models/opportunity.dart';
 import 'package:jva_projecttracker/models/recommendation.dart';
+import 'package:jva_projecttracker/models/team_share.dart';
 import 'package:jva_projecttracker/utils/humanize_ids.dart';
 
 /// Opportunities whose deadline falls within this many days (inclusive of
@@ -84,7 +85,27 @@ List<NotificationItem> buildNotifications({
   required Set<String> readIds,
   required DateTime now,
   Map<String, String> idNames = const {},
+  List<TeamShare> teamShares = const [],
+  String? currentUid,
 }) {
+  // Colleagues bringing an opportunity to everyone's attention — newest
+  // first, never your own shares.
+  final shareItems = [
+    for (final share in teamShares)
+      if (share.sharedByUid != currentUid)
+        NotificationItem(
+          id: 'share:${share.id}',
+          type: NotificationType.teamShare,
+          priority: OpportunityPriority.high,
+          title: share.opportunityTitle,
+          body: share.note,
+          sharedByName: share.sharedByName,
+          justAdded: share.justAdded,
+          timestamp: share.createdAt,
+          relatedOpportunityIds: [share.opportunityId],
+          isRead: readIds.contains('share:${share.id}'),
+        ),
+  ];
   // AI recommendation text can contain raw document IDs — show names.
   // [idNames] covers every entity (see idNamesProvider); opportunity titles
   // are added here too so callers without it still get names.
@@ -168,5 +189,10 @@ List<NotificationItem> buildNotifications({
     (a, b) => b.matchScorePercent!.compareTo(a.matchScorePercent!),
   );
 
-  return [...recommendationItems, ...deadlineItems, ...matchScoreItems];
+  return [
+    ...shareItems,
+    ...recommendationItems,
+    ...deadlineItems,
+    ...matchScoreItems,
+  ];
 }

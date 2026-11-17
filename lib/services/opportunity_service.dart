@@ -64,8 +64,11 @@ class OpportunityService {
   /// Function involved. Every other opportunity today is still created by
   /// the `searchOpportunities`/`scheduledOpportunityDiscovery`/
   /// `runDiscoverySource` Cloud Functions via the Admin SDK.
-  Future<String> create(Opportunity opportunity) async {
-    final doc = await _collection.add(opportunity.toMap());
+  Future<String> create(
+    Opportunity opportunity, {
+    Map<String, dynamic> extraFields = const {},
+  }) async {
+    final doc = await _collection.add({...opportunity.toMap(), ...extraFields});
     return doc.id;
   }
 

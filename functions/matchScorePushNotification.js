@@ -87,8 +87,16 @@ function shortDate(iso) {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Nairobi" });
 }
 
-function notificationCopy(type, { opportunityTitle, score, kind, daysLeft, deadline }) {
+function notificationCopy(type, { opportunityTitle, score, kind, daysLeft, deadline, sharedByName, note, justAdded }) {
   const title = opportunityTitle || "An opportunity";
+  if (type === "teamShare") {
+    const who = sharedByName || "A colleague";
+    const kindWord = KIND_WORDS[kind] || "opportunity";
+    return {
+      title: `${who} ${justAdded ? "added" : "shared"} a ${kindWord}`,
+      body: note ? `${title} — "${note}"` : title,
+    };
+  }
   if (type === "watchedCallOpen") {
     const when = shortDate(deadline);
     return { title: `New call open${when ? ` — deadline ${when}` : ""}`, body: title };
@@ -141,9 +149,18 @@ function notificationCopy(type, { opportunityTitle, score, kind, daysLeft, deadl
  */
 function buildNotificationMessage(
   token,
-  { opportunityTitle, opportunityId, score, kind, daysLeft, deadline, type = "matchScore" },
+  { opportunityTitle, opportunityId, score, kind, daysLeft, deadline, sharedByName, note, justAdded, type = "matchScore" },
 ) {
-  const { title, body } = notificationCopy(type, { opportunityTitle, score, kind, daysLeft, deadline });
+  const { title, body } = notificationCopy(type, {
+    opportunityTitle,
+    score,
+    kind,
+    daysLeft,
+    deadline,
+    sharedByName,
+    note,
+    justAdded,
+  });
   const data = { type };
   let link = WEB_APP_URL;
   if (opportunityId != null) {
@@ -181,14 +198,14 @@ function buildNotificationMessage(
  * Pass [uid] to collect only that one user's tokens (used by the
  * sendTestNotification callable).
  */
-async function collectRecipientTokens(firestoreDb = db(), { uid } = {}) {
+async function collectRecipientTokens(firestoreDb = db(), { uid, excludeUid } = {}) {
   let userRefs;
   if (uid) {
     userRefs = [firestoreDb.collection("users").doc(uid)];
   } else {
     const usersSnap = await firestoreDb.collection("users").get();
     if (usersSnap.empty) return [];
-    userRefs = usersSnap.docs.map((d) => d.ref);
+    userRefs = usersSnap.docs.filter((d) => d.id !== excludeUid).map((d) => d.ref);
   }
 
   const tokenLists = await Promise.all(
@@ -258,10 +275,10 @@ async function sendToTokens(recipients, payload, messagingClient = admin.messagi
  * the given opportunity. Never throws — a failed push must never fail the
  * Firestore write that triggered it.
  */
-async function notifyAllUsers(payload, { firestoreDb, messagingClient } = {}) {
+async function notifyAllUsers(payload, { firestoreDb, messagingClient, excludeUid } = {}) {
   const { type, opportunityId } = payload;
   try {
-    const recipients = await collectRecipientTokens(firestoreDb);
+    const recipients = await collectRecipientTokens(firestoreDb, { excludeUid });
     if (recipients.length === 0) {
       logger.info(`notifyAllUsers(${type}): no FCM tokens saved — skipping push for ${opportunityId}`);
       return { successCount: 0, failureCount: 0 };
@@ -314,6 +331,9 @@ exports.onOpportunityMatchScoreUpdated = onDocumentUpdated(
     // (the auto-scoring onOpportunityCreated runs for unscored tenders)
     // reads as "new opportunity", not "score changed".
     const isFirstAnalysis = !before.matchAnalyzedAt && !!after.matchAnalyzedAt;
+    // Added by hand: the person who added it already shared it with the
+    // team (shareOpportunityWithTeam), so its first score isn't news.
+    if (isFirstAnalysis && after.addedByUid) return;
     await notifyAllUsers({
       type: isFirstAnalysis ? "newOpportunity" : "matchScore",
       opportunityId,

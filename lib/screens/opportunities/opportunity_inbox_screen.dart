@@ -12,6 +12,7 @@ import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/fade_slide_in.dart';
 import 'package:jva_projecttracker/widgets/fit_score_badge.dart';
 import 'package:jva_projecttracker/widgets/hover_lift.dart';
+import 'package:jva_projecttracker/widgets/share_with_team_dialog.dart';
 
 /// The Opportunity Inbox — a triage-focused view of opportunities still
 /// awaiting a decision (`status == discovered`), regardless of which
@@ -324,6 +325,12 @@ class _InboxTile extends ConsumerWidget {
                             ),
                         icon: const Icon(Icons.archive_outlined, size: 18),
                         label: Text(strings.archiveButton),
+                      ),
+                      TextButton.icon(
+                        onPressed: () =>
+                            showShareWithTeamDialog(context, opportunity),
+                        icon: const Icon(Icons.campaign_outlined, size: 18),
+                        label: Text(strings.shareButtonShort),
                       ),
                     ],
                   ),

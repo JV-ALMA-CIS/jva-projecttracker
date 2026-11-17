@@ -30,6 +30,7 @@ import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/services/strategic_review_service.dart';
 import 'package:jva_projecttracker/theme/app_page_route.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
+import 'package:jva_projecttracker/widgets/share_with_team_dialog.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/fit_score_badge.dart';
 import 'package:jva_projecttracker/widgets/hover_lift.dart';
@@ -259,6 +260,15 @@ class _OpportunityWorkspaceScreenState
         title: Text(
           opportunityAsync.value?.title ?? strings.opportunitiesTitle,
         ),
+        actions: [
+          if (opportunityAsync.value != null)
+            IconButton(
+              onPressed: () =>
+                  showShareWithTeamDialog(context, opportunityAsync.value!),
+              icon: const Icon(Icons.campaign_outlined),
+              tooltip: strings.shareWithTeamButton,
+            ),
+        ],
       ),
       body: opportunityAsync.when(
         data: (o) => o == null

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/models/notification_item.dart';
+import 'package:jva_projecttracker/screens/opportunities/opportunity_workspace_screen.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunities_screen.dart';
 import 'package:jva_projecttracker/screens/recommendations/recommendations_screen.dart';
 import 'package:jva_projecttracker/services/providers.dart';
@@ -31,6 +32,10 @@ class NotificationCenterScreen extends ConsumerWidget {
         .map((n) => n.id)
         .toList();
 
+    final shareItems = [
+      for (final n in notifications)
+        if (n.type == NotificationType.teamShare) n,
+    ];
     final recommendationItems = [
       for (final n in notifications)
         if (n.type == NotificationType.recommendation) n,
@@ -70,6 +75,29 @@ class NotificationCenterScreen extends ConsumerWidget {
           : ListView(
               padding: const EdgeInsets.all(AppSpacing.lg),
               children: [
+                if (shareItems.isNotEmpty) ...[
+                  SectionHeader(
+                    title: strings.sharedByTeamGroupLabel,
+                    accentColor: AppStatusColors.info,
+                  ),
+                  for (final (i, n) in shareItems.indexed)
+                    FadeSlideIn(
+                      index: i,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: NotificationTile(
+                          notification: n,
+                          onTap: () => pushSlideFade(
+                            context,
+                            OpportunityWorkspaceScreen(
+                              opportunityId: n.relatedOpportunityIds.first,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: AppSpacing.lg),
+                ],
                 if (recommendationItems.isNotEmpty) ...[
                   SectionHeader(
                     title: strings.recommendationsGroupLabel,

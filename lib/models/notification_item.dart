@@ -2,7 +2,7 @@ import 'package:jva_projecttracker/models/opportunity.dart';
 
 /// What generated a [NotificationItem] — drives its icon and which group it
 /// renders under in `NotificationCenterScreen`.
-enum NotificationType { recommendation, deadline, matchScore }
+enum NotificationType { recommendation, deadline, matchScore, teamShare }
 
 /// A single entry in the Notification Center, derived (never persisted) by
 /// `buildNotifications` from live AI Recommendations (Milestone 3.6) and
@@ -23,8 +23,16 @@ class NotificationItem {
     required this.timestamp,
     this.relatedOpportunityIds = const [],
     this.recommendationId,
+    this.sharedByName,
+    this.justAdded = false,
     required this.isRead,
   });
+
+  /// Set only for [NotificationType.teamShare] — who shared it.
+  final String? sharedByName;
+
+  /// [NotificationType.teamShare] only — the person added it by hand.
+  final bool justAdded;
 
   final String id;
   final NotificationType type;

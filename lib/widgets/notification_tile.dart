@@ -34,6 +34,11 @@ class NotificationTile extends ConsumerWidget {
       NotificationType.matchScore => strings.matchScoreNotificationSubtitle(
         notification.matchScorePercent ?? 0,
       ),
+      NotificationType.teamShare => strings.teamShareSubtitle(
+        notification.sharedByName ?? '',
+        notification.body ?? '',
+        justAdded: notification.justAdded,
+      ),
     };
 
     return Card(
@@ -51,6 +56,7 @@ class NotificationTile extends ConsumerWidget {
               NotificationType.recommendation => Icons.auto_awesome_outlined,
               NotificationType.deadline => Icons.schedule_outlined,
               NotificationType.matchScore => Icons.trending_up_outlined,
+              NotificationType.teamShare => Icons.campaign_outlined,
             },
             color: foreground,
             size: 20,

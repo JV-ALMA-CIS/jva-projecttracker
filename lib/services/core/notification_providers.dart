@@ -6,6 +6,8 @@ import 'package:jva_projecttracker/services/notification_builder.dart';
 import 'package:jva_projecttracker/services/notification_preferences_service.dart';
 import 'package:jva_projecttracker/services/opportunities/opportunity_providers.dart';
 import 'package:jva_projecttracker/services/opportunity_filters.dart';
+import 'package:jva_projecttracker/services/team_share_service.dart';
+import 'auth_providers.dart';
 import 'package:jva_projecttracker/services/recommendations/recommendation_providers.dart';
 
 import 'settings_providers.dart';
@@ -64,6 +66,8 @@ final notificationsProvider = Provider<List<NotificationItem>>((ref) {
     readIds: ref.watch(notificationReadIdsProvider),
     now: DateTime.now(),
     idNames: ref.watch(idNamesProvider),
+    teamShares: ref.watch(recentTeamSharesProvider).value ?? const [],
+    currentUid: ref.watch(authStateChangesProvider).value?.uid,
   );
 });
 

@@ -1,5 +1,6 @@
 import 'dart:developer' as developer;
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
@@ -153,6 +154,10 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                   ],
+                  if (user != null) ...[
+                    const _DisplayNameField(),
+                    const SizedBox(height: 16),
+                  ],
                   if (profile != null) ...[
                     Text(
                       '${strings.roleLabel}: ${strings.userRoleLabel(profile.role)}',
@@ -240,6 +245,76 @@ class _TestNotificationButtonState
             )
           : const Icon(Icons.notifications_active_outlined),
       label: Text(strings.sendTestNotificationButton),
+    );
+  }
+}
+
+/// The name colleagues see when this person shares an opportunity. Stored
+/// on the login profile (Firebase Auth display name), which the
+/// `shareOpportunityWithTeam` function reads from the sign-in token.
+class _DisplayNameField extends ConsumerStatefulWidget {
+  const _DisplayNameField();
+
+  @override
+  ConsumerState<_DisplayNameField> createState() => _DisplayNameFieldState();
+}
+
+class _DisplayNameFieldState extends ConsumerState<_DisplayNameField> {
+  late final TextEditingController _controller = TextEditingController(
+    text: FirebaseAuth.instance.currentUser?.displayName ?? '',
+  );
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final strings = ref.read(appStringsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    setState(() => _saving = true);
+    try {
+      await user.updateDisplayName(_controller.text.trim());
+      // Refresh the sign-in token so the next share carries the new name.
+      await user.getIdToken(true);
+      messenger.showSnackBar(SnackBar(content: Text(strings.nameSavedMessage)));
+    } catch (e) {
+      developer.log('Saving display name failed', name: 'Settings', error: e);
+      messenger.showSnackBar(SnackBar(content: Text(strings.errorPrefix(e))));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = ref.watch(appStringsProvider);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _controller,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              labelText: strings.yourNameLabel,
+              helperText: strings.yourNameHelper,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: FilledButton.tonal(
+            onPressed: _saving ? null : _save,
+            child: Text(strings.saveButtonShort),
+          ),
+        ),
+      ],
     );
   }
 }
