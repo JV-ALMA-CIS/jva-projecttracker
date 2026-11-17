@@ -80,8 +80,23 @@ const WEB_APP_URL = "https://jva-projecttracker.web.app/";
  */
 const KIND_WORDS = { tender: "tender", grant: "grant / call", programme: "programme" };
 
-function notificationCopy(type, { opportunityTitle, score, kind, daysLeft }) {
+/** "23 Sep 2026" from an ISO date string; "" if missing/invalid. */
+function shortDate(iso) {
+  const d = iso ? new Date(iso) : null;
+  if (!d || Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Nairobi" });
+}
+
+function notificationCopy(type, { opportunityTitle, score, kind, daysLeft, deadline }) {
   const title = opportunityTitle || "An opportunity";
+  if (type === "watchedCallOpen") {
+    const when = shortDate(deadline);
+    return { title: `New call open${when ? ` — deadline ${when}` : ""}`, body: title };
+  }
+  if (type === "watchedCallExtended") {
+    const when = shortDate(deadline);
+    return { title: `Deadline extended${when ? ` to ${when}` : ""}`, body: title };
+  }
   if (type === "newOpportunity") {
     const kindWord = KIND_WORDS[kind] || "opportunity";
     return { title: `New ${kindWord} — ${score}% match`, body: title };
@@ -126,9 +141,9 @@ function notificationCopy(type, { opportunityTitle, score, kind, daysLeft }) {
  */
 function buildNotificationMessage(
   token,
-  { opportunityTitle, opportunityId, score, kind, daysLeft, type = "matchScore" },
+  { opportunityTitle, opportunityId, score, kind, daysLeft, deadline, type = "matchScore" },
 ) {
-  const { title, body } = notificationCopy(type, { opportunityTitle, score, kind, daysLeft });
+  const { title, body } = notificationCopy(type, { opportunityTitle, score, kind, daysLeft, deadline });
   const data = { type };
   let link = WEB_APP_URL;
   if (opportunityId != null) {

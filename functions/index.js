@@ -3602,6 +3602,25 @@ exports.onOpportunityMatchScoreUpdated = onOpportunityMatchScoreUpdated;
 const { scheduledDeadlineReminders } = require("./deadlineReminders");
 exports.scheduledDeadlineReminders = scheduledDeadlineReminders;
 
+// Watched funding-call pages (ABIL Explore / Invest, ...) — see callPageWatcher.js.
+const { makeScheduledCallPageWatch, checkAllWatchedPages } = require("./callPageWatcher");
+const extractWatchedPage = (prompt) => retryAsync(() => callGeminiForJson(prompt), { label: "callPageWatcher" });
+exports.scheduledCallPageWatch = makeScheduledCallPageWatch(extractWatchedPage);
+
+// Watched tender listing pages (U.S. Embassy Nairobi RFQs, ...) — see listingPageWatcher.js.
+const { makeScheduledListingPageWatch, checkAllListingPages } = require("./listingPageWatcher");
+exports.scheduledListingPageWatch = makeScheduledListingPageWatch(extractWatchedPage);
+
+/** Callable: checkWatchedListingPages -> { [pageKey]: counts } — runs the listing watcher now. */
+exports.checkWatchedListingPages = onCall({ timeoutSeconds: 300 }, async () => {
+  return checkAllListingPages({ db, extract: extractWatchedPage });
+});
+
+/** Callable: checkWatchedCallPages -> { [pageKey]: result } — runs the watcher now. */
+exports.checkWatchedCallPages = onCall({ timeoutSeconds: 120 }, async () => {
+  return checkAllWatchedPages({ db, extract: extractWatchedPage });
+});
+
 /**
  * True when an opportunity was written without any usable score — the RSS,
  * HTML-scraper and email connectors deliberately leave fitScorePercent at 0

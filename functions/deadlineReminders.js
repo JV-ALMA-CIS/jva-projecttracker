@@ -29,8 +29,9 @@ function toDate(value) {
  * `deadlineRemindersSent` list to write back — or null if no reminder is due.
  *
  * Only opportunities someone would act on get reminders: still open
- * (not applied/closed), and either scoring at or above the notify threshold
- * or already moved into "reviewing" by a person. When several reminder
+ * (not applied/closed), and either scoring at or above the notify threshold,
+ * already moved into "reviewing" by a person, or from a watched call page
+ * (callPageWatcher.js). When several reminder
  * points have been crossed at once (e.g. the opportunity was found 2 days
  * before its deadline), only the most urgent one is sent and all crossed
  * points are marked, so nobody gets two pushes in one morning.
@@ -38,7 +39,9 @@ function toDate(value) {
 function reminderDue(opportunity, now = new Date()) {
   if (!opportunity || NO_REMINDER_STATUSES.has(opportunity.status)) return null;
   const qualifies =
-    matchNotifyScoreFor(opportunity) != null || opportunity.status === "reviewing";
+    matchNotifyScoreFor(opportunity) != null ||
+    opportunity.status === "reviewing" ||
+    opportunity.watched === true;
   if (!qualifies) return null;
 
   const deadline = toDate(opportunity.deadline);
