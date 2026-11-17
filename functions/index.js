@@ -3616,6 +3616,31 @@ exports.checkWatchedListingPages = onCall({ timeoutSeconds: 300 }, async () => {
   return checkAllListingPages({ db, extract: extractWatchedPage });
 });
 
+// Kenya PPIP (tenders.go.ke) — every active public tender, scored daily. See connectors/ppipConnector.js.
+const { runPpipDiscovery } = require("./connectors/ppipConnector");
+const runPpip = ({ quiet = false } = {}) =>
+  runPpipDiscovery({
+    db,
+    admin,
+    buildProfile: buildCompanyProfile,
+    scoreBatch: (prompt) => retryAsync(() => callGeminiForJson(prompt), { label: "ppipScoring" }),
+    logger,
+    quiet,
+  });
+
+/** Every morning at 06:45 Nairobi time, before staff start work. */
+exports.scheduledPpipDiscovery = onSchedule(
+  { schedule: "every day 06:45", timeZone: "Africa/Nairobi", timeoutSeconds: 540 },
+  async () => {
+    await runPpip();
+  },
+);
+
+/** Callable: runPpipImport — { quiet?: boolean } -> counts. `quiet` for the first bulk import. */
+exports.runPpipImport = onCall({ timeoutSeconds: 540 }, async (request) => {
+  return runPpip({ quiet: request.data?.quiet === true });
+});
+
 /** Callable: checkWatchedCallPages -> { [pageKey]: result } — runs the watcher now. */
 exports.checkWatchedCallPages = onCall({ timeoutSeconds: 120 }, async () => {
   return checkAllWatchedPages({ db, extract: extractWatchedPage });
