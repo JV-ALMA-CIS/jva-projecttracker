@@ -252,6 +252,28 @@ extension GeographyPriorityX on GeographyPriority {
   }
 }
 
+/// What kind of opportunity this is — a procurement tender the company would
+/// bid on, a grant / call for proposals it would apply to for funding, or an
+/// accelerator / innovation programme. Set by discovery (`kind` in
+/// Firestore); opportunities written before this field existed read as
+/// [tender], which every one of them was.
+enum OpportunityKind { tender, grant, programme }
+
+extension OpportunityKindX on OpportunityKind {
+  String get label => switch (this) {
+    OpportunityKind.tender => 'Tender',
+    OpportunityKind.grant => 'Grant / Call',
+    OpportunityKind.programme => 'Programme',
+  };
+
+  static OpportunityKind fromString(String? value) {
+    return OpportunityKind.values.firstWhere(
+      (k) => k.name == value,
+      orElse: () => OpportunityKind.tender,
+    );
+  }
+}
+
 enum DiscoverySourceType {
   governmentProcurement,
   developmentOrganization,
@@ -417,6 +439,9 @@ class Opportunity {
   /// currently only run in the AI-search discovery path).
   final GeographyPriority? geographyPriority;
 
+  /// Tender vs grant vs programme — see [OpportunityKind].
+  final OpportunityKind kind;
+
   // --- Tender Source / Discovery Engine v2 (Milestone 3.8a) ---
   // Written by createOpportunitiesFromCandidates() in Cloud Functions for
   // every opportunity created via a TenderSource connector. Like the
@@ -565,6 +590,7 @@ class Opportunity {
     this.discoverySourceId,
     this.discoverySourceType,
     this.geographyPriority,
+    this.kind = OpportunityKind.tender,
     this.tenderSourceId,
     this.tenderSourceCategory,
     this.tenderDiscoveryMethod,
@@ -675,6 +701,7 @@ class Opportunity {
       geographyPriority: map['geographyPriority'] != null
           ? GeographyPriorityX.fromString(map['geographyPriority'] as String)
           : null,
+      kind: OpportunityKindX.fromString(map['kind'] as String?),
       tenderSourceId: map['tenderSourceId'] as String?,
       tenderSourceCategory: map['tenderSourceCategory'] != null
           ? TenderSourceCategory.values.firstWhere(
@@ -861,6 +888,7 @@ class Opportunity {
       'discoverySourceId': discoverySourceId,
       'discoverySourceType': discoverySourceType?.name,
       'geographyPriority': geographyPriority?.name,
+      'kind': kind.name,
       'tenderSourceId': tenderSourceId,
       'tenderSourceCategory': tenderSourceCategory?.name,
       'tenderDiscoveryMethod': tenderDiscoveryMethod?.name,

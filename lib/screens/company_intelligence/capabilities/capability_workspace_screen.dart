@@ -284,20 +284,16 @@ class _BodyState extends ConsumerState<_Body> {
           items: products,
           nameOf: (p) => p.name,
           accentColor: AppEntityColors.product,
-          onTap: (p) => pushSlideFade(
-            context,
-            ProductWorkspaceScreen(productId: p.id),
-          ),
+          onTap: (p) =>
+              pushSlideFade(context, ProductWorkspaceScreen(productId: p.id)),
         ),
         RelatedEntitySection<ServiceModel>(
           title: strings.servicesTitle,
           items: services,
           nameOf: (s) => s.name,
           accentColor: AppEntityColors.service,
-          onTap: (s) => pushSlideFade(
-            context,
-            ServiceWorkspaceScreen(serviceId: s.id),
-          ),
+          onTap: (s) =>
+              pushSlideFade(context, ServiceWorkspaceScreen(serviceId: s.id)),
         ),
         RelatedEntitySection<Technology>(
           title: strings.technologiesTitle,
@@ -314,10 +310,8 @@ class _BodyState extends ConsumerState<_Body> {
           items: industries,
           nameOf: (i) => i.name,
           accentColor: AppEntityColors.industry,
-          onTap: (i) => pushSlideFade(
-            context,
-            IndustryWorkspaceScreen(industryId: i.id),
-          ),
+          onTap: (i) =>
+              pushSlideFade(context, IndustryWorkspaceScreen(industryId: i.id)),
         ),
         RelatedEntitySection<Experience>(
           title: strings.experiencesTitle,

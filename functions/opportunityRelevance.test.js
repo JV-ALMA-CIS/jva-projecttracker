@@ -7,6 +7,7 @@ const assert = require("node:assert/strict");
 const {
   isRelevantCandidate,
   isAllowedCountry,
+  isAllowedGrantCandidate,
   classifyGeographyPriority,
   GEOGRAPHY_PRIORITY_RANK,
 } = require("./opportunityRelevance");
@@ -249,6 +250,78 @@ test("GEOGRAPHY_PRIORITY_RANK orders kenya before eastAfrica before africa befor
   assert.ok(GEOGRAPHY_PRIORITY_RANK.eastAfrica < GEOGRAPHY_PRIORITY_RANK.africa);
   assert.ok(
     GEOGRAPHY_PRIORITY_RANK.africa < GEOGRAPHY_PRIORITY_RANK.internationalStrategic,
+  );
+});
+
+// --- grants: isAllowedGrantCandidate / titleOnly ------------------------
+
+const abil = {
+  title: "ABIL EXPLORE Kenya Open Call",
+  description: "ESA and Kenya Space Agency fund Earth Observation innovation by Kenyan start-ups and SMEs.",
+  sourceUrl: "https://abil.ksa.go.ke/",
+};
+
+test("isAllowedGrantCandidate allows a call that names Kenya (ABIL EXPLORE)", () => {
+  assert.equal(isAllowedGrantCandidate(abil), true);
+});
+
+test("isAllowedGrantCandidate allows a call open to African applicants when the model confirms Kenyan eligibility", () => {
+  assert.equal(
+    isAllowedGrantCandidate({
+      title: "Climate Innovation Fund 2026",
+      description: "Grants for start-ups across Africa building climate solutions.",
+      kenyaEligible: true,
+      eligibility: "Registered SMEs in any African country",
+    }),
+    true,
+  );
+});
+
+test("isAllowedGrantCandidate allows a third-country-open call when the model confirms Kenyan eligibility", () => {
+  assert.equal(
+    isAllowedGrantCandidate({
+      title: "EIC Pathfinder Open",
+      description: "Breakthrough technology research.",
+      kenyaEligible: true,
+      eligibility: "Consortia may include entities from third countries",
+    }),
+    true,
+  );
+});
+
+test("isAllowedGrantCandidate rejects an open-sounding call the model did not confirm as Kenya-eligible", () => {
+  assert.equal(
+    isAllowedGrantCandidate({
+      title: "Climate Innovation Fund 2026",
+      description: "Grants for start-ups across Africa.",
+      kenyaEligible: false,
+    }),
+    false,
+  );
+});
+
+test("isAllowedGrantCandidate never trusts kenyaEligible alone without supporting wording", () => {
+  assert.equal(
+    isAllowedGrantCandidate({
+      title: "Regional SME Digitalisation Grant",
+      description: "Support for SMEs in Bavaria.",
+      kenyaEligible: true,
+      eligibility: "SMEs registered in Bavaria",
+    }),
+    false,
+  );
+});
+
+test("isRelevantCandidate titleOnly ignores 'workshop' in a grant description", () => {
+  const grant = { ...abil, description: "Shortlisted applicants attend a kick-off workshop in Nairobi." };
+  assert.equal(isRelevantCandidate(grant), false);
+  assert.equal(isRelevantCandidate(grant, { titleOnly: true }), true);
+});
+
+test("isRelevantCandidate titleOnly still rejects a scholarship by its title", () => {
+  assert.equal(
+    isRelevantCandidate({ title: "Mastercard Foundation Scholarship 2026", sourceUrl: "https://x.org" }, { titleOnly: true }),
+    false,
   );
 });
 

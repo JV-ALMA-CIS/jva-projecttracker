@@ -209,6 +209,36 @@ test("test type carries no opportunity id and links to the app root", () => {
   assert.equal(message.webpush.fcmOptions.link, "https://jva-projecttracker.web.app/");
 });
 
+test("newOpportunity copy names the kind — grant / call", () => {
+  const message = buildNotificationMessage("token-1", {
+    type: "newOpportunity",
+    kind: "grant",
+    opportunityTitle: "ABIL EXPLORE Kenya Open Call",
+    opportunityId: "opp-9",
+    score: 88,
+  });
+  assert.equal(message.notification.title, "New grant / call — 88% match");
+});
+
+test("newOpportunity copy falls back to 'opportunity' when kind is missing", () => {
+  const message = buildNotificationMessage("token-1", {
+    type: "newOpportunity",
+    opportunityTitle: "Tender",
+    opportunityId: "opp-1",
+    score: 75,
+  });
+  assert.equal(message.notification.title, "New opportunity — 75% match");
+});
+
+test("deadline copy says 'in N days', 'tomorrow' and 'today'", () => {
+  const title = (daysLeft) =>
+    buildNotificationMessage("t", { type: "deadline", opportunityId: "o", opportunityTitle: "X", daysLeft })
+      .notification.title;
+  assert.equal(title(14), "Deadline in 14 days");
+  assert.equal(title(1), "Deadline tomorrow");
+  assert.equal(title(0), "Deadline today");
+});
+
 // --- collectRecipientTokens ------------------------------------------------
 
 /**

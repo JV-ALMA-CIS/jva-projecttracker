@@ -67,9 +67,7 @@ class RelationshipPicker<T> extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(label, style: theme.textTheme.labelLarge),
-                ),
+                Expanded(child: Text(label, style: theme.textTheme.labelLarge)),
                 if (options.isNotEmpty)
                   Text(
                     '${selected.length}/${options.length}',
@@ -220,8 +218,7 @@ class _RelationshipPickerSheetState<T>
                         return CheckboxListTile(
                           value: _localSelected.contains(id),
                           title: Text(widget.nameOf(o)),
-                          onChanged: (checked) =>
-                              _toggle(id, checked ?? false),
+                          onChanged: (checked) => _toggle(id, checked ?? false),
                         );
                       },
                     ),

@@ -78,10 +78,17 @@ const WEB_APP_URL = "https://jva-projecttracker.web.app/";
  * fit score, or auto-scored by Match Analysis right after creation); `test`
  * is the Settings screen's "Send test notification" button.
  */
-function notificationCopy(type, { opportunityTitle, score }) {
+const KIND_WORDS = { tender: "tender", grant: "grant / call", programme: "programme" };
+
+function notificationCopy(type, { opportunityTitle, score, kind, daysLeft }) {
   const title = opportunityTitle || "An opportunity";
   if (type === "newOpportunity") {
-    return { title: `New opportunity — ${score}% match`, body: title };
+    const kindWord = KIND_WORDS[kind] || "opportunity";
+    return { title: `New ${kindWord} — ${score}% match`, body: title };
+  }
+  if (type === "deadline") {
+    const when = daysLeft <= 0 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${daysLeft} days`;
+    return { title: `Deadline ${when}`, body: title };
   }
   if (type === "test") {
     return {
@@ -119,9 +126,9 @@ function notificationCopy(type, { opportunityTitle, score }) {
  */
 function buildNotificationMessage(
   token,
-  { opportunityTitle, opportunityId, score, type = "matchScore" },
+  { opportunityTitle, opportunityId, score, kind, daysLeft, type = "matchScore" },
 ) {
-  const { title, body } = notificationCopy(type, { opportunityTitle, score });
+  const { title, body } = notificationCopy(type, { opportunityTitle, score, kind, daysLeft });
   const data = { type };
   let link = WEB_APP_URL;
   if (opportunityId != null) {
@@ -236,21 +243,15 @@ async function sendToTokens(recipients, payload, messagingClient = admin.messagi
  * the given opportunity. Never throws — a failed push must never fail the
  * Firestore write that triggered it.
  */
-async function notifyAllUsers(
-  { type, opportunityId, opportunityTitle, score },
-  { firestoreDb, messagingClient } = {},
-) {
+async function notifyAllUsers(payload, { firestoreDb, messagingClient } = {}) {
+  const { type, opportunityId } = payload;
   try {
     const recipients = await collectRecipientTokens(firestoreDb);
     if (recipients.length === 0) {
       logger.info(`notifyAllUsers(${type}): no FCM tokens saved — skipping push for ${opportunityId}`);
       return { successCount: 0, failureCount: 0 };
     }
-    const result = await sendToTokens(
-      recipients,
-      { type, opportunityId, opportunityTitle, score },
-      messagingClient,
-    );
+    const result = await sendToTokens(recipients, payload, messagingClient);
     logger.info(
       `notifyAllUsers(${type}): opportunity ${opportunityId} — ` +
         `${result.successCount} succeeded, ${result.failureCount} failed, ${recipients.length} token(s)`,
@@ -303,6 +304,7 @@ exports.onOpportunityMatchScoreUpdated = onDocumentUpdated(
       opportunityId,
       opportunityTitle: after.title,
       score,
+      kind: after.kind,
     });
   },
 );

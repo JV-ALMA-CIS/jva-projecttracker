@@ -567,6 +567,21 @@ class AppStrings {
   String get searchNowButton => _it ? 'Cerca ora' : 'Search now';
   String get searchTooltip =>
       _it ? 'Cerca nuove opportunità' : 'Search for new opportunities';
+  String get findGrantsTooltip => _it
+      ? 'Trova bandi, sovvenzioni e programmi'
+      : 'Find grants, calls & programmes';
+  String get grantSearchRunning => _it
+      ? 'Ricerca di bandi e sovvenzioni in corso… (1–3 minuti)'
+      : 'Searching for grants and calls… (1–3 minutes)';
+  String grantSearchResult(int count) => count == 0
+      ? (_it ? 'Nessun nuovo bando trovato.' : 'No new grants or calls found.')
+      : (_it
+            ? 'Trovati $count nuovi bandi/programmi.'
+            : 'Found $count new grant(s) / programme(s).');
+  String get fieldOpportunityKind => _it ? 'Tipo' : 'Kind';
+  String get fieldDeadlineOptional =>
+      _it ? 'Scadenza (facoltativa)' : 'Deadline (optional)';
+  String get pickDateButton => _it ? 'Scegli data' : 'Pick date';
   String foundOpportunities(int count) => _it
       ? 'Trovate $count nuove opportunità'
       : 'Found $count new opportunities';
@@ -653,6 +668,11 @@ class AppStrings {
       _it ? 'Nessuna scadenza' : 'No deadline';
   String get fitScoreFilterLabel => _it ? 'Punteggio di fit' : 'Fit score';
   String get buyerTypeFilterLabel => _it ? 'Tipo di ente' : 'Buyer type';
+  String opportunityKindLabel(OpportunityKind kind) => switch (kind) {
+    OpportunityKind.tender => _it ? 'Gare' : 'Tenders',
+    OpportunityKind.grant => _it ? 'Bandi / Sovvenzioni' : 'Grants / Calls',
+    OpportunityKind.programme => _it ? 'Programmi' : 'Programmes',
+  };
   String get buyerTypeGovernment => _it ? 'Governo' : 'Government';
   String get buyerTypeDevelopmentPartner =>
       _it ? 'Partner di sviluppo' : 'Development partner';

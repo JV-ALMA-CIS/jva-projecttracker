@@ -296,4 +296,18 @@ class OpportunityService {
     final result = await callable.call<Map<String, dynamic>>({'query': query});
     return (result.data['created'] as num?)?.toInt() ?? 0;
   }
+
+  /// Triggers the `searchGrants` callable Cloud Function — finds open grants,
+  /// calls for proposals and accelerator programmes a Kenyan company can
+  /// apply to (one AI search per funding theme when [query] is null), and
+  /// writes new ones with `kind: grant|programme`. Returns how many were
+  /// created.
+  Future<int> triggerGrantDiscovery({String? query}) async {
+    final callable = _functions.httpsCallable(
+      'searchGrants',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 300)),
+    );
+    final result = await callable.call<Map<String, dynamic>>({'query': query});
+    return (result.data['created'] as num?)?.toInt() ?? 0;
+  }
 }

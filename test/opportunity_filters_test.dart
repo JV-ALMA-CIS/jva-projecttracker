@@ -608,4 +608,39 @@ void main() {
       }
     });
   });
+
+  group('kind facet', () {
+    final tender = _opportunity(id: 'tender');
+    final grant = Opportunity.fromMap('grant', {
+      ..._opportunity(id: 'grant').toMap(),
+      'kind': 'grant',
+    });
+    final now = DateTime.utc(2024, 1, 1);
+
+    test('null kind matches every opportunity', () {
+      final result = filterOpportunities(
+        [tender, grant],
+        const OpportunityBuFilter.all(),
+        const OpportunityFacetFilters(),
+        now: now,
+      );
+      expect(result.map((o) => o.id), ['tender', 'grant']);
+    });
+
+    test('grant kind keeps only grants', () {
+      final result = filterOpportunities(
+        [tender, grant],
+        const OpportunityBuFilter.all(),
+        const OpportunityFacetFilters(kind: OpportunityKind.grant),
+        now: now,
+      );
+      expect(result.map((o) => o.id), ['grant']);
+    });
+
+    test('clearKind resets the facet and isEmpty reflects it', () {
+      const filtered = OpportunityFacetFilters(kind: OpportunityKind.grant);
+      expect(filtered.isEmpty, isFalse);
+      expect(filtered.copyWith(clearKind: true).isEmpty, isTrue);
+    });
+  });
 }

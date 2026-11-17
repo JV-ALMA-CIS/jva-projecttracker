@@ -279,10 +279,8 @@ class _BodyState extends ConsumerState<_Body> {
           items: products,
           nameOf: (p) => p.name,
           accentColor: AppEntityColors.product,
-          onTap: (p) => pushSlideFade(
-            context,
-            ProductWorkspaceScreen(productId: p.id),
-          ),
+          onTap: (p) =>
+              pushSlideFade(context, ProductWorkspaceScreen(productId: p.id)),
         ),
         RelatedEntitySection<Capability>(
           title: strings.capabilitiesTitle,

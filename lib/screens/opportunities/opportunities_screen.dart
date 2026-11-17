@@ -63,6 +63,7 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
   bool _backfilling = false;
   bool _seedingBusinessUnits = false;
   bool _verifyingSourceUrls = false;
+  bool _findingGrants = false;
 
   @override
   void dispose() {
@@ -85,6 +86,29 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
   /// maintained path.
   void _runDiscovery() {
     pushSlideFade(context, const TenderSourcesScreen());
+  }
+
+  /// Runs grant / call-for-proposals discovery (`searchGrants`). Results
+  /// land in the list via the Firestore stream; qualifying ones also push a
+  /// notification to everyone.
+  Future<void> _findGrants() async {
+    final strings = ref.read(appStringsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _findingGrants = true);
+    messenger.showSnackBar(SnackBar(content: Text(strings.grantSearchRunning)));
+    try {
+      final created = await ref
+          .read(opportunityServiceProvider)
+          .triggerGrantDiscovery();
+      messenger.showSnackBar(
+        SnackBar(content: Text(strings.grantSearchResult(created))),
+      );
+    } catch (e) {
+      _log.e('Grant discovery failed', error: e);
+      messenger.showSnackBar(SnackBar(content: Text(strings.errorPrefix(e))));
+    } finally {
+      if (mounted) setState(() => _findingGrants = false);
+    }
   }
 
   /// Admin-only setup step — run this BEFORE the backfill button below.
@@ -212,6 +236,17 @@ class _OpportunitiesScreenState extends ConsumerState<OpportunitiesScreen>
             onPressed: _runDiscovery,
             icon: const Icon(Icons.travel_explore_outlined),
             tooltip: strings.searchTooltip,
+          ),
+          IconButton(
+            onPressed: _findingGrants ? null : _findGrants,
+            icon: _findingGrants
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.volunteer_activism_outlined),
+            tooltip: strings.findGrantsTooltip,
           ),
           if (isAdmin) ...[
             IconButton(
@@ -766,6 +801,29 @@ class _FacetFilterBar extends StatelessWidget {
         Wrap(
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
+          children: [
+            FilterChip(
+              label: Text(strings.filterAllLabel),
+              selected: facets.kind == null,
+              onSelected: (_) => onChanged(facets.copyWith(clearKind: true)),
+            ),
+            for (final kind in OpportunityKind.values)
+              FilterChip(
+                avatar: Icon(_kindIcon(kind), size: 16),
+                label: Text(strings.opportunityKindLabel(kind)),
+                selected: facets.kind == kind,
+                onSelected: (selected) => onChanged(
+                  selected
+                      ? facets.copyWith(kind: kind)
+                      : facets.copyWith(clearKind: true),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             for (final facet in BuyerTypeFacet.values)
@@ -816,6 +874,12 @@ String _fitScoreThresholdLabel(AppStrings strings, FitScoreThreshold t) =>
       FitScoreThreshold.at70 => '≥70',
       FitScoreThreshold.at85 => '≥85',
     };
+
+IconData _kindIcon(OpportunityKind kind) => switch (kind) {
+  OpportunityKind.tender => Icons.gavel_outlined,
+  OpportunityKind.grant => Icons.volunteer_activism_outlined,
+  OpportunityKind.programme => Icons.rocket_launch_outlined,
+};
 
 String _buyerTypeFacetLabel(AppStrings strings, BuyerTypeFacet facet) =>
     switch (facet) {
@@ -968,6 +1032,15 @@ class _OpportunitiesTile extends ConsumerWidget {
                         avatar: const Icon(Icons.event_outlined, size: 14),
                         label: Text(
                           '${opportunity.deadline!.year}-${opportunity.deadline!.month.toString().padLeft(2, '0')}-${opportunity.deadline!.day.toString().padLeft(2, '0')}',
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    if (opportunity.kind != OpportunityKind.tender)
+                      Chip(
+                        avatar: Icon(_kindIcon(opportunity.kind), size: 14),
+                        label: Text(
+                          strings.opportunityKindLabel(opportunity.kind),
                         ),
                         visualDensity: VisualDensity.compact,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

@@ -353,6 +353,19 @@ class _ManualOpportunityDialogState
   final _procuringOrganizationController = TextEditingController();
   final _tenderReferenceNumberController = TextEditingController();
   final _requiredTechnologiesController = TextEditingController();
+  OpportunityKind _kind = OpportunityKind.tender;
+  DateTime? _deadline;
+
+  Future<void> _pickDeadline() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _deadline ?? now,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (picked != null) setState(() => _deadline = picked);
+  }
 
   @override
   void dispose() {
@@ -401,6 +414,8 @@ class _ManualOpportunityDialogState
                 ? null
                 : tenderReferenceNumber,
             requiredTechnologies: requiredTechnologies,
+            deadline: _deadline,
+            kind: _kind,
             discoveredAt: now,
             updatedAt: now,
             discoverySourceType: DiscoverySourceType.manual,
@@ -427,6 +442,38 @@ class _ManualOpportunityDialogState
                 labelText: strings.fieldOpportunityTitle,
               ),
               autofocus: true,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            DropdownButtonFormField<OpportunityKind>(
+              initialValue: _kind,
+              decoration: InputDecoration(
+                labelText: strings.fieldOpportunityKind,
+              ),
+              items: [
+                for (final k in OpportunityKind.values)
+                  DropdownMenuItem(value: k, child: Text(k.label)),
+              ],
+              onChanged: (v) => setState(() => _kind = v ?? _kind),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _deadline == null
+                        ? strings.fieldDeadlineOptional
+                        : '${strings.deadlineFilterLabel}: '
+                              '${_deadline!.year}-'
+                              '${_deadline!.month.toString().padLeft(2, '0')}-'
+                              '${_deadline!.day.toString().padLeft(2, '0')}',
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _pickDeadline,
+                  icon: const Icon(Icons.event_outlined),
+                  label: Text(strings.pickDateButton),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.md),
             TextField(

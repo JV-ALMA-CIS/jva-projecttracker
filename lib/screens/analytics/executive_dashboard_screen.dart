@@ -17,6 +17,7 @@ import 'package:jva_projecttracker/widgets/hover_lift.dart';
 import 'package:jva_projecttracker/widgets/kpi_card.dart';
 import 'package:jva_projecttracker/widgets/page_header.dart';
 import 'package:jva_projecttracker/widgets/section_header.dart';
+import 'package:jva_projecttracker/utils/humanize_ids.dart';
 
 /// A fixed color per dashboard section, mapped to the platform's semantic
 /// [AppStatusColors] roles based on what each section actually represents
@@ -355,6 +356,14 @@ class _ExecutiveDashboardScreenState
     DateFormat dateFormat,
   ) {
     final theme = Theme.of(context);
+    // AI summary text can contain raw IDs — show names instead (see
+    // humanizeIds).
+    final idNames = <String, String>{
+      for (final b in ref.watch(businessUnitsStreamProvider).value ?? const [])
+        b.id: b.name,
+      for (final o in ref.watch(opportunitiesStreamProvider).value ?? const [])
+        if (o.title.isNotEmpty) o.id: o.title,
+    };
 
     return HoverLift(
       child: Card(
@@ -405,7 +414,7 @@ class _ExecutiveDashboardScreenState
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(summary.narrative),
+                      Text(humanizeIds(summary.narrative, idNames)),
                       if (summary.generatedAt != null) ...[
                         const SizedBox(height: AppSpacing.sm),
                         Text(
@@ -443,11 +452,11 @@ class _ExecutiveDashboardScreenState
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        insight.title,
+                                        humanizeIds(insight.title, idNames),
                                         style: theme.textTheme.labelLarge,
                                       ),
                                       Text(
-                                        insight.reasoning,
+                                        humanizeIds(insight.reasoning, idNames),
                                         style: theme.textTheme.bodySmall,
                                       ),
                                     ],

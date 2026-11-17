@@ -504,4 +504,39 @@ void main() {
       expect(opportunity.sourceUrlIsFallback, isFalse);
     },
   );
+
+  group('kind', () {
+    test(
+      'defaults to tender for documents written before the field existed',
+      () {
+        final o = Opportunity.fromMap('legacy', {
+          'title': 'Old tender',
+          'discoveredAt': null,
+          'updatedAt': null,
+        });
+        expect(o.kind, OpportunityKind.tender);
+      },
+    );
+
+    test('round-trips grant and programme through toMap/fromMap', () {
+      for (final kind in [OpportunityKind.grant, OpportunityKind.programme]) {
+        final now = DateTime.utc(2026, 11, 16);
+        final o = Opportunity(
+          id: 'o',
+          title: 'ABIL EXPLORE Kenya Open Call',
+          description: '',
+          sourceUrl: 'https://abil.ksa.go.ke/',
+          kind: kind,
+          discoveredAt: now,
+          updatedAt: now,
+        );
+        expect(o.toMap()['kind'], kind.name);
+        expect(Opportunity.fromMap('o', o.toMap()).kind, kind);
+      }
+    });
+
+    test('an unknown kind string falls back to tender', () {
+      expect(OpportunityKindX.fromString('mystery'), OpportunityKind.tender);
+    });
+  });
 }

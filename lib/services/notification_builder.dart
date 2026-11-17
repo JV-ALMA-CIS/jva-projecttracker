@@ -1,6 +1,7 @@
 import 'package:jva_projecttracker/models/notification_item.dart';
 import 'package:jva_projecttracker/models/opportunity.dart';
 import 'package:jva_projecttracker/models/recommendation.dart';
+import 'package:jva_projecttracker/utils/humanize_ids.dart';
 
 /// Opportunities whose deadline falls within this many days (inclusive of
 /// already-overdue) are notification-worthy at all — anything further out
@@ -83,14 +84,19 @@ List<NotificationItem> buildNotifications({
   required Set<String> readIds,
   required DateTime now,
 }) {
+  // AI recommendation text can contain raw opportunity IDs — show names.
+  final opportunityNames = {
+    for (final o in opportunities)
+      if (o.title.isNotEmpty) o.id: o.title,
+  };
   final recommendationItems = [
     for (final recommendation in activeRecommendations)
       NotificationItem(
         id: 'recommendation:${recommendation.id}',
         type: NotificationType.recommendation,
         priority: recommendation.priority,
-        title: recommendation.title,
-        body: recommendation.reasoning,
+        title: humanizeIds(recommendation.title, opportunityNames),
+        body: humanizeIds(recommendation.reasoning, opportunityNames),
         timestamp: recommendation.generatedAt,
         relatedOpportunityIds: recommendation.relatedOpportunityIds,
         recommendationId: recommendation.id,

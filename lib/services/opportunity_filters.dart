@@ -322,6 +322,11 @@ BuyerTypeFacet buyerTypeFacetFor(Opportunity opportunity) {
   return BuyerTypeFacet.unknown;
 }
 
+/// Kind facet — tender / grant / programme. Null means "any kind".
+bool matchesKindFacet(Opportunity opportunity, OpportunityKind? kind) {
+  return kind == null || opportunity.kind == kind;
+}
+
 bool matchesBuyerTypeFacet(Opportunity opportunity, BuyerTypeFacet facet) {
   if (facet == BuyerTypeFacet.any) return true;
   return buyerTypeFacetFor(opportunity) == facet;
@@ -405,6 +410,7 @@ class OpportunityFacetFilters {
     this.deadlineWindow = DeadlineWindow.any,
     this.fitScoreThreshold = FitScoreThreshold.any,
     this.buyerType = BuyerTypeFacet.any,
+    this.kind,
   });
 
   final String searchQuery;
@@ -418,13 +424,17 @@ class OpportunityFacetFilters {
   final FitScoreThreshold fitScoreThreshold;
   final BuyerTypeFacet buyerType;
 
+  /// Null means "any kind" (same convention as [stage]).
+  final OpportunityKind? kind;
+
   bool get isEmpty =>
       searchQuery.trim().isEmpty &&
       stage == null &&
       valueBand == ValueBand.any &&
       deadlineWindow == DeadlineWindow.any &&
       fitScoreThreshold == FitScoreThreshold.any &&
-      buyerType == BuyerTypeFacet.any;
+      buyerType == BuyerTypeFacet.any &&
+      kind == null;
 
   OpportunityFacetFilters copyWith({
     String? searchQuery,
@@ -434,6 +444,8 @@ class OpportunityFacetFilters {
     DeadlineWindow? deadlineWindow,
     FitScoreThreshold? fitScoreThreshold,
     BuyerTypeFacet? buyerType,
+    OpportunityKind? kind,
+    bool clearKind = false,
   }) {
     return OpportunityFacetFilters(
       searchQuery: searchQuery ?? this.searchQuery,
@@ -442,6 +454,7 @@ class OpportunityFacetFilters {
       deadlineWindow: deadlineWindow ?? this.deadlineWindow,
       fitScoreThreshold: fitScoreThreshold ?? this.fitScoreThreshold,
       buyerType: buyerType ?? this.buyerType,
+      kind: clearKind ? null : (kind ?? this.kind),
     );
   }
 }
@@ -469,6 +482,7 @@ List<Opportunity> filterOpportunities(
       return false;
     }
     if (!matchesBuyerTypeFacet(o, facets.buyerType)) return false;
+    if (!matchesKindFacet(o, facets.kind)) return false;
     if (!matchesSearchQuery(o, facets.searchQuery)) return false;
     return true;
   }).toList();

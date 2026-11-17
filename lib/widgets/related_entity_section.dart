@@ -104,8 +104,7 @@ class _RelatedEntitySectionState<T> extends State<RelatedEntitySection<T>> {
                             ? 'Show less'
                             : '+${widget.items.length - widget.collapsedCount} more',
                       ),
-                      onPressed: () =>
-                          setState(() => _expanded = !_expanded),
+                      onPressed: () => setState(() => _expanded = !_expanded),
                     ),
                 ],
               ),

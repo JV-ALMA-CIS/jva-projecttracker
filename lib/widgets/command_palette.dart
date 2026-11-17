@@ -134,6 +134,12 @@ class _CommandPaletteDialogState extends ConsumerState<_CommandPaletteDialog> {
         group: goTo,
         onSelected: () => ref.read(selectedTabIndexProvider.notifier).index = 4,
       ),
+      _PaletteEntry(
+        icon: Icons.notifications_outlined,
+        label: strings.notificationCenterTitle,
+        group: goTo,
+        onSelected: () => ref.read(selectedTabIndexProvider.notifier).index = 5,
+      ),
     ]);
 
     entries.addAll([

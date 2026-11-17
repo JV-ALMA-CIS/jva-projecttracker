@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/models/notification_item.dart';
 //import 'package:jva_projecttracker/models/opportunity.dart';
-import 'package:jva_projecttracker/screens/notifications/notification_center_screen.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunity_workspace_screen.dart';
 import 'package:jva_projecttracker/screens/projects/project_workspace_screen.dart';
 import 'package:jva_projecttracker/screens/recommendations/recommendations_screen.dart';
@@ -354,7 +353,10 @@ class DashboardScreen extends ConsumerWidget {
                             .withValues(alpha: 0.75),
                         theme: theme,
                       ),
-                      _headerStatDivider(theme, color: theme.colorScheme.onPrimaryContainer),
+                      _headerStatDivider(
+                        theme,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
                       _headerStat(
                         icon: Icons.travel_explore_outlined,
                         count: topOpportunities.length,
@@ -364,7 +366,10 @@ class DashboardScreen extends ConsumerWidget {
                             .withValues(alpha: 0.75),
                         theme: theme,
                       ),
-                      _headerStatDivider(theme, color: theme.colorScheme.onPrimaryContainer),
+                      _headerStatDivider(
+                        theme,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
                       _headerStat(
                         icon: Icons.emoji_events_outlined,
                         count:
@@ -393,10 +398,10 @@ class DashboardScreen extends ConsumerWidget {
             accentColor: AppStatusColors.danger,
             trailing: attentionItems.length > attentionDisplayLimit
                 ? TextButton(
-                    onPressed: () => pushSlideFade(
-                      context,
-                      const NotificationCenterScreen(),
-                    ),
+                    // Switch to the Notifications tab rather than pushing a
+                    // second copy of the same screen on top.
+                    onPressed: () =>
+                        ref.read(selectedTabIndexProvider.notifier).index = 5,
                     child: Text(strings.viewAllButton),
                   )
                 : null,

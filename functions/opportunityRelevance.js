@@ -43,7 +43,7 @@ const NON_TENDER_KEYWORD_PATTERNS = [
  * Analysis pass ever gets a chance to see the candidate, since a rejected
  * candidate is never written as an opportunity document at all.
  */
-function isRelevantCandidate(candidate, { now = new Date() } = {}) {
+function isRelevantCandidate(candidate, { now = new Date(), titleOnly = false } = {}) {
   if (!candidate || !candidate.title || !candidate.sourceUrl) return false;
 
   if (candidate.deadline) {
@@ -51,7 +51,12 @@ function isRelevantCandidate(candidate, { now = new Date() } = {}) {
     if (!Number.isNaN(deadline.getTime()) && deadline < now) return false;
   }
 
-  const haystack = `${candidate.title} ${candidate.description || ""}`;
+  // Grant calls routinely mention workshops, conferences or webinars in
+  // their description (kick-off workshop, info webinar), so for grants only
+  // the title is screened — pass `titleOnly: true`.
+  const haystack = titleOnly
+    ? candidate.title
+    : `${candidate.title} ${candidate.description || ""}`;
   if (NON_TENDER_KEYWORD_PATTERNS.some((pattern) => pattern.test(haystack))) {
     return false;
   }
@@ -134,6 +139,56 @@ function classifyGeographyPriority(candidate) {
   return "internationalStrategic";
 }
 
+/**
+ * Wording that signals a call is open beyond the EU / a single donor
+ * country — used only together with the model's own `kenyaEligible` flag.
+ */
+const GRANT_OPEN_ELIGIBILITY_KEYWORDS = [
+  "third countr",
+  "non-eu",
+  "international applicants",
+  "worldwide",
+  "all countries",
+  "any country",
+  "low- and middle-income",
+  "low and middle income",
+  "lmic",
+  "developing countr",
+  "global south",
+  "sub-saharan",
+];
+
+/**
+ * Geography rule for grants / calls for proposals / programmes, which is
+ * deliberately looser than [isAllowedCountry] for tenders: a call like
+ * Horizon Europe, the EIC or an African innovation fund often never names
+ * Kenya, yet a Kenyan-registered company can apply. A grant candidate is
+ * allowed when either
+ * - it names Kenya / East Africa outright (same check as tenders), or
+ * - the model confirmed `kenyaEligible: true` from the call text AND the
+ *   text itself backs that up with African or open/third-country
+ *   eligibility wording — the model's flag alone is never trusted.
+ * Calls restricted to EU entities, individuals, etc. are excluded by the
+ * discovery prompt and fail this check (no kenyaEligible / no wording).
+ */
+function isAllowedGrantCandidate(candidate) {
+  if (isAllowedCountry(candidate)) return true;
+  if (candidate?.kenyaEligible !== true) return false;
+  const haystack = [
+    candidate.title,
+    candidate.description,
+    candidate.client,
+    candidate.eligibility,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return (
+    GEOGRAPHY_KEYWORDS.africa.some((k) => haystack.includes(k)) ||
+    GRANT_OPEN_ELIGIBILITY_KEYWORDS.some((k) => haystack.includes(k))
+  );
+}
+
 /** Sort rank for classifyGeographyPriority's tiers — lower sorts first. */
 const GEOGRAPHY_PRIORITY_RANK = {
   kenya: 0,
@@ -145,6 +200,7 @@ const GEOGRAPHY_PRIORITY_RANK = {
 module.exports = {
   isRelevantCandidate,
   isAllowedCountry,
+  isAllowedGrantCandidate,
   classifyGeographyPriority,
   GEOGRAPHY_PRIORITY_RANK,
 };

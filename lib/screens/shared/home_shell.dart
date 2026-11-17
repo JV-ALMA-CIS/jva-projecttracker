@@ -5,6 +5,7 @@ import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/screens/company_intelligence/company_intelligence_screen.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunities_screen.dart';
 import 'package:jva_projecttracker/screens/dashboard/dashboard_screen.dart';
+import 'package:jva_projecttracker/screens/notifications/notification_center_screen.dart';
 import 'package:jva_projecttracker/screens/submissions/submissions_screen.dart';
 import 'package:jva_projecttracker/screens/projects/projects_screen.dart';
 import 'package:jva_projecttracker/services/providers.dart';
@@ -30,7 +31,13 @@ const _screens = [
   OpportunitiesScreen(),
   CompanyIntelligenceScreen(),
   SubmissionsScreen(),
+  NotificationCenterScreen(),
 ];
+
+/// Tab index of the Notifications tab — the last destination, so adding it
+/// didn't shift any existing tab index used elsewhere (dashboard links,
+/// command palette).
+const kNotificationsTabIndex = 5;
 
 Widget _fadeSwitcher(int index) {
   final safeIndex = index.clamp(0, _screens.length - 1);
@@ -57,22 +64,21 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     ref.read(selectedTabIndexProvider.notifier).index = index;
   }
 
-  Widget _dashboardIcon(int urgentCount) {
-    if (urgentCount == 0) {
-      return const Icon(Icons.dashboard_outlined);
-    }
-
-    return Badge(
-      label: Text('$urgentCount'),
-      child: const Icon(Icons.dashboard_outlined),
+  /// Notifications tab icon with the unread count — same count as the
+  /// sidebar badge and the old bell button.
+  Widget _notificationsIcon(int unreadCount, {bool selected = false}) {
+    final icon = Icon(
+      selected ? Icons.notifications : Icons.notifications_outlined,
     );
+    if (unreadCount == 0) return icon;
+    return Badge(label: Text('$unreadCount'), child: icon);
   }
 
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
     final index = ref.watch(selectedTabIndexProvider);
-    final urgentCount = ref.watch(urgentAlertsProvider).length;
+    final unreadCount = ref.watch(unreadNotificationCountProvider);
 
     final destinations = [
       _NavDestinationData(
@@ -100,6 +106,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         selectedIcon: Icons.send,
         label: strings.submissionsSectionTitle,
       ),
+      _NavDestinationData(
+        icon: Icons.notifications_outlined,
+        selectedIcon: Icons.notifications,
+        label: strings.notificationCenterTitle,
+      ),
     ];
 
     final width = MediaQuery.sizeOf(context).width;
@@ -107,29 +118,24 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final Widget scaffold;
 
     if (width < AppBreakpoints.compact) {
-      // 5 destinations + labels is tight on a small phone
-      // (< AppBreakpoints.smallPhone, e.g. iPhone SE at ~375dp) — the
-      // default NavigationBar sizing was designed around 3-5 items on a
-      // ~390dp+ phone and visibly crowds/truncates below that. Dropping to
-      // `selectedLabel` (label only under the active item) recovers enough
-      // horizontal room for every icon to sit comfortably instead of
-      // squeezing all five icon+label pairs into the same row.
-      final isSmallPhone = width < AppBreakpoints.smallPhone;
+      // Six destinations with every label shown crowds and truncates on a
+      // phone (NavigationBar is sized for 3-5 items), so only the selected
+      // item shows its label — every icon still gets comfortable room.
       scaffold = Scaffold(
         body: SafeArea(child: _fadeSwitcher(index)),
         bottomNavigationBar: NavigationBar(
           selectedIndex: index,
           onDestinationSelected: _onDestinationSelected,
-          labelBehavior: isSmallPhone
-              ? NavigationDestinationLabelBehavior.onlyShowSelected
-              : NavigationDestinationLabelBehavior.alwaysShow,
+          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
           destinations: [
             for (final (i, destination) in destinations.indexed)
               NavigationDestination(
-                icon: i == 0
-                    ? _dashboardIcon(urgentCount)
+                icon: i == kNotificationsTabIndex
+                    ? _notificationsIcon(unreadCount)
                     : Icon(destination.icon),
-                selectedIcon: Icon(destination.selectedIcon),
+                selectedIcon: i == kNotificationsTabIndex
+                    ? _notificationsIcon(unreadCount, selected: true)
+                    : Icon(destination.selectedIcon),
                 label: destination.label,
               ),
           ],
@@ -154,7 +160,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 selectedIndex: index,
                 onDestinationSelected: _onDestinationSelected,
                 extended: extended,
-                badgeCounts: {0: urgentCount},
+                badgeCounts: {kNotificationsTabIndex: unreadCount},
               ),
               const VerticalDivider(width: 1),
               Expanded(child: _fadeSwitcher(index)),

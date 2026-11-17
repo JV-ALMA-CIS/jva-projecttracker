@@ -12,10 +12,12 @@ const {
 const {
   isRelevantCandidate,
   isAllowedCountry,
+  isAllowedGrantCandidate,
   classifyGeographyPriority,
   GEOGRAPHY_PRIORITY_RANK,
 } = require("./opportunityRelevance");
 const { applyGroundedUrlCrossCheck } = require("./lib/groundedUrlValidation");
+const { humanizeIds } = require("./lib/humanizeIds");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -124,11 +126,9 @@ with 5-8 entries (area names 2-6 words each). No commentary, no markdown fences.
  * scores each against that profile, and writes new (deduped by sourceUrl)
  * opportunities into Firestore. Returns the number of newly created documents.
  */
-async function runOpportunityDiscovery(query) {
-  const profile = await buildCompanyProfile();
-  const ai = genAiClient();
-
-  const prompt = `You are a business development assistant for a software company with this profile:
+/** Prompt opening for tender discovery (procurement the company bids on). */
+function buildTenderPromptHeader(profile, query) {
+  return `You are a business development assistant for a software company with this profile:
 
 ${profile}
 
@@ -141,7 +141,86 @@ GEOGRAPHY — only include opportunities located in Kenya, Uganda, Tanzania,
 Rwanda, or Burundi. Do not include opportunities from any other country
 (e.g. Canada, the UK, the US, or elsewhere in Africa) even if they otherwise
 look like a strong match — they will be discarded regardless of fit score,
-so do not waste a slot on one.
+so do not waste a slot on one.`;
+}
+
+/**
+ * Prompt opening for grant / call-for-proposals / programme discovery —
+ * funding the company applies for, typically with one of its own platforms
+ * as the funded innovation (e.g. the ESA/KSA ABIL EXPLORE call).
+ */
+function buildGrantPromptHeader(profile, focus) {
+  return `You are a funding and partnerships assistant for JV ALMA CIS, a company
+registered and headquartered in Kenya that builds its own software platforms
+and delivers construction, agribusiness, facility-management and IT projects.
+Company profile:
+
+${profile}
+
+Using web search, find up to 8 CURRENTLY OPEN grants, calls for proposals,
+innovation funds, challenge prizes, or accelerator/incubator programmes that
+this company could apply to as the lead applicant${focus ? `, focused on: ${focus}` : ""}.
+Prioritise calls where one of the company's own platforms (listed under
+"Company-built applications") could be the funded innovation. Examples of the
+kind of call wanted: the ESA / Kenya Space Agency "Africa Business Innovation
+Lab (ABIL) EXPLORE" open call, EU Funding & Tenders portal calls for
+proposals, Horizon Europe / EIC, Global Gateway, African Development Bank,
+African Union, and foundation or donor innovation funds.
+
+ELIGIBILITY — only include calls a Kenyan-registered company (start-up/SME)
+can apply to as lead: calls targeted at Kenya or East Africa, at African
+applicants, or open internationally / to third countries. Exclude calls
+restricted to EU-member-state entities, to individuals (scholarships,
+fellowships, student prizes), or to NGOs only. Set "kenyaEligible" to true
+only when the call text confirms a Kenyan entity can apply, and summarise
+that rule in "eligibility" (e.g. "Kenyan start-ups and SMEs"). Exclude calls
+whose deadline has passed.
+
+For each call, estimate a fit score (0-100) for how well the company's
+platforms and experience match it, and briefly justify the score. Set
+"kind" to "programme" for accelerators, incubators and mentoring programmes,
+otherwise "grant".`;
+}
+
+const GRANT_SCHEMA_EXTRA_FIELDS = `,
+  "kind": "grant" | "programme",
+  "kenyaEligible": boolean,
+  "eligibility": string`;
+
+/**
+ * Funding themes the weekly grant discovery searches, one AI search per
+ * theme (each search returns at most 8 calls, so splitting by theme finds
+ * far more than one broad search would). Edit this list to change what the
+ * platform looks for.
+ */
+const GRANT_FOCUS_AREAS = [
+  "Earth observation, space data, satellite, geospatial / GIS and AI innovation calls (e.g. ESA, Kenya Space Agency, ABIL, EU space programmes)",
+  "digital agriculture, agritech, coffee traceability, EU deforestation regulation compliance and food-systems innovation funds",
+  "software, AI and digital innovation grants and accelerators for African start-ups and SMEs (e.g. EIC, Global Gateway, AfDB, African Union, GSMA, foundations)",
+  "construction, infrastructure, facility management, energy and climate / green-building innovation grants",
+];
+
+/** Runs grant discovery once per focus area (in parallel) and returns the total created. */
+async function runGrantDiscovery(query) {
+  const runs = query
+    ? [runOpportunityDiscovery(query, { mode: "grant" })]
+    : GRANT_FOCUS_AREAS.map((focus) => runOpportunityDiscovery(undefined, { mode: "grant", focus }));
+  const results = await Promise.allSettled(runs);
+  let created = 0;
+  for (const r of results) {
+    if (r.status === "fulfilled") created += r.value;
+    else logger.error("runGrantDiscovery: one focus-area search failed", r.reason);
+  }
+  return created;
+}
+
+async function runOpportunityDiscovery(query, { mode = "tender", focus } = {}) {
+  const profile = await buildCompanyProfile();
+  const ai = genAiClient();
+  const isGrant = mode === "grant";
+  const logPrefix = isGrant ? "runGrantDiscovery" : "runOpportunityDiscovery";
+
+  const prompt = `${isGrant ? buildGrantPromptHeader(profile, query || focus) : buildTenderPromptHeader(profile, query)}
 
 CRITICAL — "sourceUrl" must be a direct, real, publicly loadable link to the
 actual tender/opportunity page as it appears in the address bar of the site
@@ -167,7 +246,7 @@ Return ONLY a JSON array, each item shaped as:
   "deadline": string | null (ISO 8601 date, or null if unknown),
   "tags": string[],
   "fitScorePercent": number (0-100),
-  "fitReasoning": string
+  "fitReasoning": string${isGrant ? GRANT_SCHEMA_EXTRA_FIELDS : ""}
 }
 If none of the opportunities you found have a real, verifiable sourceUrl,
 return an empty JSON array: []
@@ -214,7 +293,7 @@ explanation before or after it, even when the array is empty.`;
   const { kept: groundedCandidates } = await applyGroundedUrlCrossCheck(
     candidates,
     response,
-    { logPrefix: "runOpportunityDiscovery" },
+    { logPrefix },
   );
   candidates = groundedCandidates;
   const groundingDroppedCount = candidatesFromModel - candidates.length;
@@ -227,9 +306,14 @@ explanation before or after it, even when the array is empty.`;
   // then sorted Kenya -> the other four East African countries so
   // higher-priority opportunities are created (and thus surfaced) first
   // within this run; see classifyGeographyPriority.
-  const beforeGeographyCount = candidates.filter((c) => isRelevantCandidate(c)).length;
+  const relevanceOptions = { titleOnly: isGrant };
+  const beforeGeographyCount = candidates.filter((c) => isRelevantCandidate(c, relevanceOptions)).length;
   const relevantCandidates = candidates
-    .filter((c) => isRelevantCandidate(c) && isAllowedCountry(c))
+    .filter(
+      (c) =>
+        isRelevantCandidate(c, relevanceOptions) &&
+        (isGrant ? isAllowedGrantCandidate(c) : isAllowedCountry(c)),
+    )
     .map((c) => ({ candidate: c, geographyPriority: classifyGeographyPriority(c) }))
     .sort(
       (a, b) =>
@@ -278,6 +362,8 @@ explanation before or after it, even when the array is empty.`;
       fitReasoning: c.fitReasoning || "",
       tags: Array.isArray(c.tags) ? c.tags : [],
       geographyPriority,
+      kind: isGrant ? (c.kind === "programme" ? "programme" : "grant") : "tender",
+      ...(isGrant ? { eligibility: c.eligibility || null } : {}),
       discoveredAt: now,
       updatedAt: now,
     });
@@ -290,10 +376,10 @@ explanation before or after it, even when the array is empty.`;
   // mostly unverified links" is diagnosable from Cloud Logging alone,
   // without having to correlate several separate log lines.
   logger.info(
-    `runOpportunityDiscovery: ${candidatesFromModel} from model -> ` +
+    `${logPrefix}${focus ? ` [${focus.slice(0, 40)}]` : ""}: ${candidatesFromModel} from model -> ` +
       `${groundingDroppedCount} dropped (grounding), ` +
       `${relevanceDroppedCount} dropped (relevance), ` +
-      `${geographyDroppedCount} dropped (geography — outside Kenya/Uganda/Tanzania/Rwanda/Burundi), ` +
+      `${geographyDroppedCount} dropped (${isGrant ? "eligibility — not open to Kenyan applicants" : "geography — outside Kenya/Uganda/Tanzania/Rwanda/Burundi"}), ` +
       `${created} created (${verifiedCount} verified, ${unverifiedCount} unverified)`,
   );
   return created;
@@ -309,6 +395,24 @@ exports.searchOpportunities = onCall({ timeoutSeconds: 240 }, async (request) =>
   const created = await runOpportunityDiscovery(request.data?.query);
   return { created };
 });
+
+/**
+ * Callable: searchGrants — { query?: string } -> { created: number }
+ * Finds open grants / calls for proposals / programmes the company can
+ * apply to. With no query, searches every GRANT_FOCUS_AREAS theme.
+ */
+exports.searchGrants = onCall({ timeoutSeconds: 300 }, async (request) => {
+  const created = await runGrantDiscovery(request.data?.query);
+  return { created };
+});
+
+/** Scheduled: grant discovery every Monday, after tender discovery. */
+exports.scheduledGrantDiscovery = onSchedule(
+  { schedule: "every monday 08:30", timeZone: "Africa/Nairobi", timeoutSeconds: 540 },
+  async () => {
+    await runGrantDiscovery();
+  },
+);
 
 /** Scheduled: runs the same discovery routine automatically every Monday. */
 exports.scheduledOpportunityDiscovery = onSchedule(
@@ -355,6 +459,7 @@ async function buildKnowledgeGraph() {
 
   const sections = [];
   const validIds = {};
+  const namesById = new Map();
 
   KNOWLEDGE_GRAPH_COLLECTIONS.forEach((c, i) => {
     const snap = snapshots[i];
@@ -365,9 +470,13 @@ async function buildKnowledgeGraph() {
     });
     sections.push(`${c.label}:\n${lines.length ? lines.join("\n") : "(none recorded yet)"}`);
     validIds[c.field] = new Set(snap.docs.map((d) => d.id));
+    for (const d of snap.docs) {
+      const name = d.data()[c.textFields[0]];
+      if (name) namesById.set(d.id, String(name));
+    }
   });
 
-  return { text: sections.join("\n\n"), validIds };
+  return { text: sections.join("\n\n"), validIds, namesById };
 }
 
 /** Builds the classification prompt given the opportunity + knowledge graph context. */
@@ -1003,6 +1112,7 @@ async function buildOpportunityPortfolioSummary() {
   return {
     text: lines.length ? lines.join("\n") : "(no opportunities recorded yet)",
     validIds: new Set(snap.docs.map((d) => d.id)),
+    namesById: new Map(snap.docs.map((d) => [d.id, String(d.data().title || "")]).filter(([, t]) => t)),
   };
 }
 
@@ -1030,6 +1140,12 @@ opportunity that looks stalled or at risk, a capability or technology gap
 recurring across several opportunities that's worth investing in, or a
 business unit that appears over- or under-represented in the current
 pipeline. Every recommendation must explain WHY, citing specific evidence.
+
+IMPORTANT — staff read every "title", "reasoning" and "narrative" you write.
+In that text, always refer to opportunities and knowledge-graph entries by
+their NAME or TITLE (e.g. the tender's title), NEVER by their ID — the
+bracketed IDs are machine references that belong ONLY in the "related...Ids"
+arrays.
 
 Return ONLY a JSON array, each item shaped as:
 {
@@ -1061,11 +1177,11 @@ No commentary, no markdown fences, no explanation outside the JSON array.`;
  * unset. Every ID field is filtered down to IDs that actually exist in
  * [validIds] — never a hallucinated reference.
  */
-function validateRecommendationItem(item, validIds) {
+function validateRecommendationItem(item, validIds, namesById = new Map()) {
   if (!item || typeof item !== "object" || Array.isArray(item)) return null;
 
-  const title = typeof item.title === "string" ? item.title.trim() : "";
-  const reasoning = typeof item.reasoning === "string" ? item.reasoning.trim() : "";
+  const title = typeof item.title === "string" ? humanizeIds(item.title.trim(), namesById) : "";
+  const reasoning = typeof item.reasoning === "string" ? humanizeIds(item.reasoning.trim(), namesById) : "";
   if (!title || !reasoning) return null;
 
   const result = {
@@ -1098,9 +1214,12 @@ function validateRecommendationItem(item, validIds) {
  * the number of newly created documents.
  */
 async function runRecommendationGeneration() {
-  const [{ text: knowledgeGraphText, validIds: knowledgeValidIds }, { text: portfolioText, validIds: opportunityIds }] =
-    await Promise.all([buildKnowledgeGraph(), buildOpportunityPortfolioSummary()]);
+  const [
+    { text: knowledgeGraphText, validIds: knowledgeValidIds, namesById: knowledgeNames },
+    { text: portfolioText, validIds: opportunityIds, namesById: opportunityNames },
+  ] = await Promise.all([buildKnowledgeGraph(), buildOpportunityPortfolioSummary()]);
   const validIds = { ...knowledgeValidIds, opportunityIds };
+  const namesById = new Map([...knowledgeNames, ...opportunityNames]);
 
   const prompt = buildRecommendationsPrompt({ portfolioText, knowledgeGraphText });
 
@@ -1118,7 +1237,7 @@ async function runRecommendationGeneration() {
 
   let created = 0;
   for (const candidate of candidates) {
-    const result = validateRecommendationItem(candidate, validIds);
+    const result = validateRecommendationItem(candidate, validIds, namesById);
     if (!result) continue;
 
     const existing = await db
@@ -3119,6 +3238,12 @@ WHY, citing specific evidence (business unit/industry concentration, stalled
 proposals, deadlines, risk levels, confidence scores, etc.) rather than
 restating raw numbers.
 
+IMPORTANT — staff read every "title", "reasoning" and "narrative" you write.
+In that text, always refer to opportunities and knowledge-graph entries by
+their NAME or TITLE (e.g. the tender's title), NEVER by their ID — the
+bracketed IDs are machine references that belong ONLY in the "related...Ids"
+arrays.
+
 Return ONLY a JSON object of the form:
 {
   "narrative": string (3-5 sentences, the kind of summary a CEO would read
@@ -3147,20 +3272,20 @@ No commentary, no markdown fences, no explanation outside the JSON object.`;
  * opportunity IDs, the same "never a hallucinated reference" rule every
  * other AI feature in this file follows.
  */
-function validateExecutiveSummary(parsed, opportunityIds) {
+function validateExecutiveSummary(parsed, opportunityIds, namesById = new Map()) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Executive summary response was not a JSON object");
   }
 
-  const narrative = typeof parsed.narrative === "string" ? parsed.narrative.trim() : "";
+  const narrative = typeof parsed.narrative === "string" ? humanizeIds(parsed.narrative.trim(), namesById) : "";
   if (!narrative) throw new Error("Executive summary response had an empty narrative");
 
   const rawInsights = Array.isArray(parsed.insights) ? parsed.insights : [];
   const insights = [];
   for (const item of rawInsights) {
     if (!item || typeof item !== "object" || Array.isArray(item)) continue;
-    const title = typeof item.title === "string" ? item.title.trim() : "";
-    const reasoning = typeof item.reasoning === "string" ? item.reasoning.trim() : "";
+    const title = typeof item.title === "string" ? humanizeIds(item.title.trim(), namesById) : "";
+    const reasoning = typeof item.reasoning === "string" ? humanizeIds(item.reasoning.trim(), namesById) : "";
     if (!title || !reasoning) continue;
 
     insights.push({
@@ -3178,7 +3303,11 @@ function validateExecutiveSummary(parsed, opportunityIds) {
 
 /** Callable: generateExecutiveSummary -> { generatedAt: string } */
 exports.generateExecutiveSummary = onCall({ timeoutSeconds: 120 }, async () => {
-  const [{ text: knowledgeGraphText }, { text: portfolioText, validIds: opportunityIds }, proposalsText] =
+  const [
+    { text: knowledgeGraphText, namesById: knowledgeNames },
+    { text: portfolioText, validIds: opportunityIds, namesById: opportunityNames },
+    proposalsText,
+  ] =
     await Promise.all([
       buildKnowledgeGraph(),
       buildOpportunityPortfolioSummary(),
@@ -3190,7 +3319,12 @@ exports.generateExecutiveSummary = onCall({ timeoutSeconds: 120 }, async () => {
   let result;
   try {
     result = await retryAsync(
-      async () => validateExecutiveSummary(await callGeminiForJson(prompt), opportunityIds),
+      async () =>
+        validateExecutiveSummary(
+          await callGeminiForJson(prompt),
+          opportunityIds,
+          new Map([...knowledgeNames, ...opportunityNames]),
+        ),
       { label: "generateExecutiveSummary" },
     );
   } catch (e) {
@@ -3421,6 +3555,9 @@ const {
 } = require("./matchScorePushNotification");
 exports.onOpportunityMatchScoreUpdated = onOpportunityMatchScoreUpdated;
 
+const { scheduledDeadlineReminders } = require("./deadlineReminders");
+exports.scheduledDeadlineReminders = scheduledDeadlineReminders;
+
 /**
  * True when an opportunity was written without any usable score — the RSS,
  * HTML-scraper and email connectors deliberately leave fitScorePercent at 0
@@ -3462,6 +3599,7 @@ exports.onOpportunityCreated = onDocumentCreated(
         opportunityId,
         opportunityTitle: opportunity.title,
         score,
+        kind: opportunity.kind,
       });
       return;
     }
