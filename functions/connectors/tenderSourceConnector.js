@@ -362,4 +362,5 @@ module.exports = {
   createOpportunitiesFromCandidates,
   isGroundingRedirectStub,
   checkUrlReachable,
+  looksLikeSoft404,
 };

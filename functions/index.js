@@ -8,7 +8,10 @@ const { GoogleGenAI } = require("@google/genai");
 const {
   isGroundingRedirectStub,
   checkUrlReachable,
+  looksLikeSoft404,
 } = require("./connectors/tenderSourceConnector");
+const { verifyPageMentionsTitle } = require("./lib/pageTitleVerification");
+const { runEuFundingDiscovery } = require("./connectors/euFundingConnector");
 const {
   isRelevantCandidate,
   isAllowedCountry,
@@ -179,7 +182,9 @@ whose deadline has passed.
 For each call, estimate a fit score (0-100) for how well the company's
 platforms and experience match it, and briefly justify the score. Set
 "kind" to "programme" for accelerators, incubators and mentoring programmes,
-otherwise "grant".`;
+otherwise "grant". Include partial matches with a lower fit score rather
+than returning nothing — the fit score is what decides which calls staff
+see, so an honest low score is more useful than an omission.`;
 }
 
 const GRANT_SCHEMA_EXTRA_FIELDS = `,
@@ -200,11 +205,28 @@ const GRANT_FOCUS_AREAS = [
   "construction, infrastructure, facility management, energy and climate / green-building innovation grants",
 ];
 
-/** Runs grant discovery once per focus area (in parallel) and returns the total created. */
-async function runGrantDiscovery(query) {
+/**
+ * Runs grant discovery and returns the total created: one AI web search per
+ * focus area plus the EU Funding & Tenders portal (official API), all in
+ * parallel. A free-text [query] runs a single AI search instead.
+ */
+async function runGrantDiscovery(query, { euOnly = false, quiet = false } = {}) {
+  const euRun = () =>
+    runEuFundingDiscovery({
+      db,
+      admin,
+      buildProfile: buildCompanyProfile,
+      scoreBatch: (prompt) => retryAsync(() => callGeminiForJson(prompt), { label: "euFundingScoring" }),
+      logger,
+      quiet,
+    }).then((r) => r.created);
+  if (euOnly) return euRun();
   const runs = query
     ? [runOpportunityDiscovery(query, { mode: "grant" })]
-    : GRANT_FOCUS_AREAS.map((focus) => runOpportunityDiscovery(undefined, { mode: "grant", focus }));
+    : [
+        ...GRANT_FOCUS_AREAS.map((focus) => runOpportunityDiscovery(undefined, { mode: "grant", focus })),
+        euRun(),
+      ];
   const results = await Promise.allSettled(runs);
   let created = 0;
   for (const r of results) {
@@ -290,12 +312,29 @@ explanation before or after it, even when the array is empty.`;
   // relevance/geography pre-filter below, not after: a fabricated URL must
   // never survive regardless of how relevant its title looks.
   const candidatesFromModel = candidates.length;
-  const { kept: groundedCandidates } = await applyGroundedUrlCrossCheck(
-    candidates,
-    response,
-    { logPrefix },
-  );
-  candidates = groundedCandidates;
+  const { kept: groundedCandidates, dropped: ungroundedCandidates } =
+    await applyGroundedUrlCrossCheck(candidates, response, { logPrefix });
+
+  // Second chance for candidates whose link didn't exactly match a grounded
+  // page: open the link and keep it only if the page loads and shows the
+  // candidate's title (see lib/pageTitleVerification.js). Real calls found
+  // via news/listing pages survive; invented URLs don't.
+  const rescued = (
+    await Promise.all(
+      ungroundedCandidates
+        .filter((c) => c?.sourceUrl && !isGroundingRedirectStub(c.sourceUrl))
+        .map(async (c) => {
+          const { verified, finalUrl } = await verifyPageMentionsTitle(c.sourceUrl, c.title, {
+            looksLikeSoft404,
+          });
+          return verified ? { ...c, sourceUrl: finalUrl } : null;
+        }),
+    )
+  ).filter(Boolean);
+  if (rescued.length > 0) {
+    logger.info(`${logPrefix}: kept ${rescued.length} ungrounded candidate(s) after verifying the page shows their title`);
+  }
+  candidates = [...groundedCandidates, ...rescued];
   const groundingDroppedCount = candidatesFromModel - candidates.length;
 
   // Deterministic pre-filter (expired/malformed/non-tender content) before
@@ -401,8 +440,13 @@ exports.searchOpportunities = onCall({ timeoutSeconds: 240 }, async (request) =>
  * Finds open grants / calls for proposals / programmes the company can
  * apply to. With no query, searches every GRANT_FOCUS_AREAS theme.
  */
-exports.searchGrants = onCall({ timeoutSeconds: 300 }, async (request) => {
-  const created = await runGrantDiscovery(request.data?.query);
+exports.searchGrants = onCall({ timeoutSeconds: 540 }, async (request) => {
+  // `euOnly` + `quiet`: run just the EU portal import without pushes —
+  // used once for the first bulk import of the whole EU catalogue.
+  const created = await runGrantDiscovery(request.data?.query, {
+    euOnly: request.data?.euOnly === true,
+    quiet: request.data?.quiet === true,
+  });
   return { created };
 });
 
@@ -3591,6 +3635,9 @@ exports.onOpportunityCreated = onDocumentCreated(
     const opportunity = event.data?.data();
     if (!opportunity) return;
     const opportunityId = event.params.opportunityId;
+    // Bulk/quiet imports (e.g. the first EU catalogue import) are already
+    // scored and must not push one alert per item.
+    if (opportunity.suppressNotification === true) return;
 
     const score = matchNotifyScoreFor(opportunity);
     if (score != null) {
