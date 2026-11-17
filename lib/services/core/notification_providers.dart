@@ -1,3 +1,4 @@
+import 'package:jva_projecttracker/services/core/id_names_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/models/notification_item.dart';
 import 'package:jva_projecttracker/models/opportunity.dart';
@@ -62,6 +63,7 @@ final notificationsProvider = Provider<List<NotificationItem>>((ref) {
         .toList(),
     readIds: ref.watch(notificationReadIdsProvider),
     now: DateTime.now(),
+    idNames: ref.watch(idNamesProvider),
   );
 });
 

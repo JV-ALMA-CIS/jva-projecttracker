@@ -73,15 +73,50 @@ function toTender(record, now) {
   };
 }
 
-/** Fetches every active tender (paged), keeping only open ones. */
-async function fetchActiveTenders({ fetchImpl = fetch, now = new Date() } = {}) {
-  const tenders = [];
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const res = await fetchImpl(`${API_URL}?perpage=${PER_PAGE}&page=${page}`, {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * GET one page, politely: the portal rate-limits (HTTP 429) clients that
+ * page quickly, so a 429 waits (Retry-After if given, else 5s, 15s, 45s)
+ * and retries. Returns the parsed body, or null if still refused.
+ */
+async function fetchPageJson(url, { fetchImpl, wait }) {
+  const delays = [5000, 15000, 45000];
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetchImpl(url, {
       headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (compatible; OpportunityTracker/1.0)" },
     });
-    if (!res.ok) throw new Error(`PPIP API returned ${res.status}`);
-    const body = await res.json();
+    if (res.ok) return res.json();
+    if (res.status !== 429 || attempt >= delays.length) {
+      if (res.status === 429) return null;
+      throw new Error(`PPIP API returned ${res.status}`);
+    }
+    const retryAfter = Number(res.headers?.get?.("retry-after"));
+    await wait(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : delays[attempt]);
+  }
+}
+
+/**
+ * Fetches every active tender (paged), keeping only open ones, pausing
+ * between pages. If the portal keeps refusing part-way, the pages already
+ * fetched are returned (the rest are picked up on the next daily run).
+ */
+async function fetchActiveTenders({
+  fetchImpl = fetch,
+  now = new Date(),
+  wait = sleep,
+  pageDelayMs = 2500,
+  logger = console,
+} = {}) {
+  const tenders = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    if (page > 1) await wait(pageDelayMs);
+    const body = await fetchPageJson(`${API_URL}?perpage=${PER_PAGE}&page=${page}`, { fetchImpl, wait });
+    if (body === null) {
+      if (page === 1) throw new Error("PPIP API is rate-limiting (429) — try again later");
+      logger.warn?.(`fetchActiveTenders: rate-limited at page ${page}; continuing with ${tenders.length} tenders`);
+      break;
+    }
     for (const record of body?.data || []) {
       const t = toTender(record, now);
       if (t) tenders.push(t);
@@ -136,8 +171,9 @@ async function runPpipDiscovery({
   now = new Date(),
   logger = console,
   quiet = false,
+  wait,
 }) {
-  const tenders = await fetchActiveTenders({ fetchImpl, now });
+  const tenders = await fetchActiveTenders({ fetchImpl, now, logger, ...(wait ? { wait } : {}) });
 
   const seen = new Set();
   for (let i = 0; i < tenders.length; i += 100) {

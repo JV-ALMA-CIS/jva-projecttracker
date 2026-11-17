@@ -20,7 +20,21 @@ const {
   GEOGRAPHY_PRIORITY_RANK,
 } = require("./opportunityRelevance");
 const { applyGroundedUrlCrossCheck } = require("./lib/groundedUrlValidation");
-const { humanizeIds } = require("./lib/humanizeIds");
+const { humanizeIds, humanizeDeep, namesFromPrompt } = require("./lib/humanizeIds");
+
+/**
+ * Every AI feature that shows the model `[ID] Name` lists (knowledge graph,
+ * opportunity portfolio, proposals) risks the model copying those IDs into
+ * text people read. This replaces any such ID in the response's readable
+ * strings with the name it was listed under, leaving `...Id(s)` reference
+ * fields untouched — one place covering recommendations, executive summary,
+ * strategic review, match analysis, classification, proposals and
+ * submission review.
+ */
+function humanizeAiJson(parsed, prompt) {
+  const names = namesFromPrompt(prompt);
+  return names.size > 0 ? humanizeDeep(parsed, names) : parsed;
+}
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -609,7 +623,7 @@ async function callGeminiForJson(prompt) {
   const text = response.text ?? "";
   if (!text.trim()) throw new Error("Empty response from model");
 
-  return extractJson(text);
+  return humanizeAiJson(extractJson(text), prompt);
 }
 
 /**
@@ -1951,7 +1965,7 @@ async function callGeminiForJsonWithAttachment(prompt, { mimeType, data }) {
   const text = response.text ?? "";
   if (!text.trim()) throw new Error("Empty response from model");
 
-  return extractJson(text);
+  return humanizeAiJson(extractJson(text), prompt);
 }
 
 /** Builds the project-document extraction prompt given the knowledge graph context. */
@@ -3639,6 +3653,15 @@ exports.scheduledPpipDiscovery = onSchedule(
 /** Callable: runPpipImport — { quiet?: boolean } -> counts. `quiet` for the first bulk import. */
 exports.runPpipImport = onCall({ timeoutSeconds: 540 }, async (request) => {
   return runPpip({ quiet: request.data?.quiet === true });
+});
+
+/**
+ * Callable: cleanStoredAiText -> { [collection]: docsUpdated } — one-off
+ * cleanup replacing raw document IDs in previously stored AI text with the
+ * names they refer to (see cleanStoredAiText.js). Safe to re-run.
+ */
+exports.cleanStoredAiText = onCall({ timeoutSeconds: 300 }, async () => {
+  return require("./cleanStoredAiText").cleanStoredAiText(db);
 });
 
 /** Callable: checkWatchedCallPages -> { [pageKey]: result } — runs the watcher now. */

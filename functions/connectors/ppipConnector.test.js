@@ -69,7 +69,8 @@ function fakeDb(scoredIds = []) {
 }
 
 const fakeAdmin = { firestore: { Timestamp: { fromDate: (d) => ({ iso: d.toISOString() }) } } };
-const quietLogger = { info() {}, error() {} };
+const quietLogger = { info() {}, error() {}, warn() {} };
+const noWait = async () => {};
 
 (async () => {
   console.log("ppipConnector.test.js");
@@ -97,7 +98,7 @@ const quietLogger = { info() {}, error() {} };
   });
 
   await test("fetchActiveTenders walks every page", async () => {
-    const ts = await fetchActiveTenders({ now: NOW, fetchImpl: fakeFetch([[record(1), record(2)], [record(3)]]) });
+    const ts = await fetchActiveTenders({ now: NOW, wait: noWait, fetchImpl: fakeFetch([[record(1), record(2)], [record(3)]]) });
     assert.deepEqual(ts.map((t) => t.id), ["1", "2", "3"]);
   });
 
@@ -108,6 +109,7 @@ const quietLogger = { info() {}, error() {} };
       admin: fakeAdmin,
       now: NOW,
       logger: quietLogger,
+      wait: noWait,
       buildProfile: async () => "PROFILE",
       fetchImpl: fakeFetch([[record(10), record(11, { is_agpo: 1 }), record(12)]]),
       scoreBatch: async () => [
@@ -134,6 +136,7 @@ const quietLogger = { info() {}, error() {} };
       admin: fakeAdmin,
       now: NOW,
       logger: quietLogger,
+      wait: noWait,
       buildProfile: async () => "PROFILE",
       fetchImpl: fakeFetch([[record(10)]]),
       scoreBatch: async () => (calls++, []),
@@ -150,11 +153,40 @@ const quietLogger = { info() {}, error() {} };
       now: NOW,
       quiet: true,
       logger: quietLogger,
+      wait: noWait,
       buildProfile: async () => "PROFILE",
       fetchImpl: fakeFetch([[record(20)]]),
       scoreBatch: async () => [{ index: 0, fitScorePercent: 90 }],
     });
     assert.equal(db.added[0].suppressNotification, true);
+  });
+
+  await test("a 429 is retried after waiting, then succeeds", async () => {
+    let calls = 0;
+    const waits = [];
+    const fetchImpl = async () => {
+      calls += 1;
+      if (calls === 1) return { ok: false, status: 429, headers: { get: () => "7" } };
+      return { ok: true, json: async () => ({ data: [record(1)], last_page: 1 }) };
+    };
+    const ts = await fetchActiveTenders({ now: NOW, fetchImpl, wait: async (ms) => waits.push(ms), logger: quietLogger });
+    assert.equal(ts.length, 1);
+    assert.deepEqual(waits, [7000], "honours Retry-After");
+  });
+
+  await test("persistent 429 part-way keeps the pages already fetched", async () => {
+    const fetchImpl = async (url) => {
+      const page = Number(new URL(url).searchParams.get("page"));
+      if (page === 1) return { ok: true, json: async () => ({ data: [record(1)], last_page: 3 }) };
+      return { ok: false, status: 429, headers: { get: () => null } };
+    };
+    const ts = await fetchActiveTenders({ now: NOW, fetchImpl, wait: noWait, logger: quietLogger });
+    assert.deepEqual(ts.map((t) => t.id), ["1"]);
+  });
+
+  await test("persistent 429 on the first page fails clearly", async () => {
+    const fetchImpl = async () => ({ ok: false, status: 429, headers: { get: () => null } });
+    await assert.rejects(fetchActiveTenders({ now: NOW, fetchImpl, wait: noWait, logger: quietLogger }), /rate-limiting/);
   });
 
   console.log(`\n${passed} test(s) passed`);

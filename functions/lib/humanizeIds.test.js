@@ -61,4 +61,54 @@ test("returns non-strings unchanged", () => {
   assert.equal(humanizeIds("", names), "");
 });
 
+const { namesFromPrompt, humanizeDeep } = require("./humanizeIds");
+const { cleanedFields } = require("../cleanStoredAiText");
+
+const BU = "Bu7x9Kq2LmN4pR6sT8vW";
+const OPP = "Op3aB5cD7eF9gH1jK2mN";
+const PROP = "Pr4qW6eR8tY0uI2oP4aS";
+const PROMPT = [
+  "Business Units:",
+  `- [${BU}] Construction - Building and civil works`,
+  "Opportunity portfolio:",
+  `- [${OPP}] KILIMO MKONONI digital extension tender | status: discovered | fitScore: 82`,
+  `- [${PROP}] "Coffee traceability proposal" — status: draft`,
+].join("\n");
+
+test("namesFromPrompt reads knowledge-graph, portfolio and quoted-title lines", () => {
+  const names = namesFromPrompt(PROMPT);
+  assert.equal(names.get(BU), "Construction");
+  assert.equal(names.get(OPP), "KILIMO MKONONI digital extension tender");
+  assert.equal(names.get(PROP), "Coffee traceability proposal");
+});
+
+test("humanizeDeep rewrites readable text but never touches ...Id(s) fields", () => {
+  const names = namesFromPrompt(PROMPT);
+  const out = humanizeDeep(
+    {
+      title: `Fast-track ${OPP}`,
+      reasoning: `Strong fit for [${BU}].`,
+      strengths: [`Track record in ${BU}`],
+      relatedOpportunityIds: [OPP],
+      opportunityId: OPP,
+      confidenceScore: 80,
+    },
+    names,
+  );
+  assert.equal(out.title, 'Fast-track "KILIMO MKONONI digital extension tender"');
+  assert.equal(out.reasoning, 'Strong fit for "Construction".');
+  assert.deepEqual(out.strengths, ['Track record in "Construction"']);
+  assert.deepEqual(out.relatedOpportunityIds, [OPP]);
+  assert.equal(out.opportunityId, OPP);
+  assert.equal(out.confidenceScore, 80);
+});
+
+test("cleanedFields returns only fields whose text actually changed", () => {
+  const names = new Map([[OPP, "Kilimo tender"]]);
+  assert.deepEqual(cleanedFields({ title: "Clean title", reasoning: `About ${OPP}` }, ["title", "reasoning"], names), {
+    reasoning: 'About "Kilimo tender"',
+  });
+  assert.deepEqual(cleanedFields({ title: "Clean" }, ["title", "reasoning"], names), {});
+});
+
 console.log(`\n${passed} test(s) passed`);

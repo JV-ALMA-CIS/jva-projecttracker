@@ -83,9 +83,13 @@ List<NotificationItem> buildNotifications({
   required List<Opportunity> opportunities,
   required Set<String> readIds,
   required DateTime now,
+  Map<String, String> idNames = const {},
 }) {
-  // AI recommendation text can contain raw opportunity IDs — show names.
+  // AI recommendation text can contain raw document IDs — show names.
+  // [idNames] covers every entity (see idNamesProvider); opportunity titles
+  // are added here too so callers without it still get names.
   final opportunityNames = {
+    ...idNames,
     for (final o in opportunities)
       if (o.title.isNotEmpty) o.id: o.title,
   };

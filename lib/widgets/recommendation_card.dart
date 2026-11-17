@@ -11,7 +11,9 @@ import 'package:jva_projecttracker/models/company_intelligence/service.dart';
 import 'package:jva_projecttracker/models/company_intelligence/technology.dart';
 import 'package:jva_projecttracker/models/opportunity.dart';
 import 'package:jva_projecttracker/models/recommendation.dart';
+import 'package:jva_projecttracker/services/core/id_names_provider.dart';
 import 'package:jva_projecttracker/services/providers.dart';
+import 'package:jva_projecttracker/utils/humanize_ids.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/priority_style.dart';
 import 'package:jva_projecttracker/widgets/recommended_entity_chips.dart';
@@ -54,6 +56,10 @@ class RecommendationCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = ref.watch(appStringsProvider);
     final theme = Theme.of(context);
+    // AI text can contain raw document IDs — show the real names instead.
+    final idNames = ref.watch(idNamesProvider);
+    final title = humanizeIds(recommendation.title, idNames);
+    final reasoning = humanizeIds(recommendation.reasoning, idNames);
     final (priorityBg, priorityFg) = priorityColors(
       theme.colorScheme,
       recommendation.priority,
@@ -79,7 +85,7 @@ class RecommendationCard extends ConsumerWidget {
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      recommendation.title,
+                      title,
                       style: theme.textTheme.titleMedium,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -121,7 +127,7 @@ class RecommendationCard extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                recommendation.reasoning,
+                reasoning,
                 style: theme.textTheme.bodyMedium,
                 maxLines: compact ? 2 : null,
                 overflow: compact ? TextOverflow.ellipsis : null,

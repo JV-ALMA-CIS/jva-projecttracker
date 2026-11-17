@@ -47,4 +47,51 @@ function humanizeIds(text, namesById = new Map()) {
     .trim();
 }
 
-module.exports = { humanizeIds, looksLikeGeneratedId };
+/**
+ * Reads the `[ID] Name` pairs a prompt was built with, so IDs the model
+ * echoes back can be replaced by the same names. Handles the three line
+ * shapes the prompt builders use:
+ *   "- [id] Name - summary"        (knowledge graph: name before " - ")
+ *   "- [id] Title | status: ..."   (opportunity portfolio: before " | ")
+ *   "[id] \"Title\" ..."           (proposals: the quoted title)
+ */
+function namesFromPrompt(prompt) {
+  const names = new Map();
+  if (typeof prompt !== "string") return names;
+  for (const m of prompt.matchAll(/\[([A-Za-z0-9]{20})\][ \t]*([^\n]*)/g)) {
+    const [, id, rest] = m;
+    if (!looksLikeGeneratedId(id)) continue;
+    let name;
+    const quoted = rest.match(/^"([^"]+)"/);
+    if (quoted) name = quoted[1];
+    else if (rest.includes(" | ")) name = rest.split(" | ")[0];
+    else name = rest.split(" - ")[0];
+    name = (name || "").trim();
+    if (name) names.set(id, name);
+  }
+  return names;
+}
+
+/** True for keys holding machine references (`opportunityId`, `relatedProductIds`, ...). */
+function isIdKey(key) {
+  return typeof key === "string" && /(Id|Ids|ID|IDs)$/.test(key);
+}
+
+/**
+ * Applies [humanizeIds] to every human-readable string inside [value]
+ * (objects/arrays walked recursively), leaving `...Id` / `...Ids` fields —
+ * the structured references — untouched.
+ */
+function humanizeDeep(value, namesById, key = null) {
+  if (isIdKey(key)) return value;
+  if (typeof value === "string") return humanizeIds(value, namesById);
+  if (Array.isArray(value)) return value.map((v) => humanizeDeep(v, namesById, null));
+  if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[k] = humanizeDeep(v, namesById, k);
+    return out;
+  }
+  return value;
+}
+
+module.exports = { humanizeIds, looksLikeGeneratedId, namesFromPrompt, humanizeDeep, isIdKey };
