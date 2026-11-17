@@ -286,6 +286,13 @@ Rwanda, or Burundi. Do not include opportunities from any other country
 look like a strong match — they will be discarded regardless of fit score,
 so do not waste a slot on one.
 
+BUYERS — skip tenders whose buyer is a Kenyan or East African public body
+(national government, ministries, counties, state corporations such as
+KETRACO or KPLC, public water companies, NG-CDF, public universities,
+colleges or hospitals) UNLESS the tender states it is donor-funded (World
+Bank, AfDB, EU, a UN agency, a bilateral donor). Prefer embassies, donors,
+UN agencies, NGOs and private companies.
+
 CRITICAL — "sourceUrl" must be a direct, real, publicly loadable link to the
 actual tender/opportunity page as it appears in the address bar of the site
 that published it (e.g. the procurement portal, UN/NGO tender board, or

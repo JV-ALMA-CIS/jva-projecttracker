@@ -21,6 +21,9 @@ const {
 } = require("./opportunityRelevance");
 const { applyGroundedUrlCrossCheck } = require("./lib/groundedUrlValidation");
 const { humanizeIds, humanizeDeep, namesFromPrompt } = require("./lib/humanizeIds");
+const { decideBuyers, archiveUpdate } = require("./lib/buyerPolicy");
+/** Gemini buyer classification for lib/buyerPolicy.js. */
+const classifyBuyers = (prompt) => retryAsync(() => callGeminiForJson(prompt), { label: "buyerPolicy" });
 
 /**
  * Every AI feature that shows the model `[ID] Name` lists (knowledge graph,
@@ -158,7 +161,15 @@ GEOGRAPHY — only include opportunities located in Kenya, Uganda, Tanzania,
 Rwanda, or Burundi. Do not include opportunities from any other country
 (e.g. Canada, the UK, the US, or elsewhere in Africa) even if they otherwise
 look like a strong match — they will be discarded regardless of fit score,
-so do not waste a slot on one.`;
+so do not waste a slot on one.
+
+BUYERS — skip tenders whose buyer is a Kenyan or East African public body
+(national government, ministries, counties, state corporations such as
+KETRACO or KPLC, public water companies, NG-CDF, public universities,
+colleges or hospitals) UNLESS the tender states it is donor-funded (World
+Bank, AfDB, EU, a UN agency, a bilateral donor). Prefer embassies, donors,
+UN agencies, NGOs and private companies.
+`;
 }
 
 /**
@@ -1658,6 +1669,20 @@ exports.scheduledBusinessUnitBackfill = onSchedule(
 /** Callable: runBusinessUnitBackfillNow -> { assigned, none, errors, remaining } */
 exports.runBusinessUnitBackfillNow = onCall({ timeoutSeconds: 540 }, async () => {
   return runBusinessUnitBackfillBatch();
+});
+
+/**
+ * Callable: cleanupPublicBuyers -> counts. One-off: archives public-body
+ * tenders awaiting triage and switches off government-only tender sources
+ * (see cleanupPublicBuyers.js / lib/buyerPolicy.js). Safe to re-run.
+ */
+exports.cleanupPublicBuyers = onCall({ timeoutSeconds: 540 }, async () => {
+  return require("./cleanupPublicBuyers").cleanupPublicBuyers({
+    db,
+    Timestamp: admin.firestore.Timestamp,
+    classify: classifyBuyers,
+    logger,
+  });
 });
 
 // Team sharing — see teamShare.js.
@@ -3723,6 +3748,20 @@ exports.onOpportunityCreated = onDocumentCreated(
     const opportunity = event.data?.data();
     if (!opportunity) return;
     const opportunityId = event.params.opportunityId;
+
+    // Buyer policy first: public-body tenders (not donor-funded) are
+    // archived straight away — no alert, no scoring, no unit sorting.
+    // See lib/buyerPolicy.js. On any error the opportunity is kept.
+    try {
+      const [decision] = await decideBuyers([opportunity], { classify: classifyBuyers });
+      if (decision.exclude) {
+        await event.data.ref.update(archiveUpdate(decision.reason, admin.firestore.Timestamp.now()));
+        logger.info(`onOpportunityCreated: archived ${opportunityId} — ${decision.reason}`);
+        return;
+      }
+    } catch (e) {
+      logger.error(`onOpportunityCreated: buyer check failed for ${opportunityId} — keeping it`, e);
+    }
 
     // Every new opportunity — whatever its source — gets its business
     // unit(s), so it lands under the right Inbox chip. Runs alongside the

@@ -225,6 +225,7 @@ async function assignBusinessUnitsToOpportunity(ref, opportunity) {
 
 /** Whether an opportunity still needs a business-unit check. */
 function needsBusinessUnits(opportunity) {
+  if (["archived", "dismissed", "lost"].includes(opportunity.status)) return false;
   const ids = opportunity.businessUnitIds;
   return (!Array.isArray(ids) || ids.length === 0) && !opportunity.businessUnitCheckedAt;
 }

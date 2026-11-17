@@ -13,6 +13,8 @@
  * Shares admin initialization with index.js (do not call initializeApp).
  */
 
+const { isDonorFunded } = require("../lib/buyerPolicy");
+
 const API_URL = "https://tenders.go.ke/api/active-tenders";
 const TENDER_PAGE = "https://tenders.go.ke/tenders";
 const PER_PAGE = 100;
@@ -173,7 +175,10 @@ async function runPpipDiscovery({
   quiet = false,
   wait,
 }) {
-  const tenders = await fetchActiveTenders({ fetchImpl, now, logger, ...(wait ? { wait } : {}) });
+  // Buyer policy: everything on PPIP is a Kenyan public body, so only
+  // donor-funded tenders are considered (see lib/buyerPolicy.js).
+  const allTenders = await fetchActiveTenders({ fetchImpl, now, logger, ...(wait ? { wait } : {}) });
+  const tenders = allTenders.filter((t) => isDonorFunded(`${t.title} ${t.entity || ""}`));
 
   const seen = new Set();
   for (let i = 0; i < tenders.length; i += 100) {
@@ -184,7 +189,7 @@ async function runPpipDiscovery({
   }
   const fresh = tenders.filter((t) => !seen.has(t.id));
   if (fresh.length === 0) {
-    logger.info(`runPpipDiscovery: ${tenders.length} active, all already scored`);
+    logger.info(`runPpipDiscovery: ${allTenders.length} active, ${tenders.length} donor-funded, all already scored`);
     return { fetched: tenders.length, alreadyScored: seen.size, scored: 0, created: 0 };
   }
 

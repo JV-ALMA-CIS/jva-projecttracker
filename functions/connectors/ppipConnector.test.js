@@ -23,7 +23,7 @@ const NOW = new Date("2026-11-17T05:00:00Z");
 function record(id, overrides = {}) {
   return {
     id,
-    title: `PROPOSED CONSTRUCTION OF CLASSROOM BLOCK ${id}`,
+    title: `PROPOSED CONSTRUCTION OF CLASSROOM BLOCK ${id} (FINANCED BY THE WORLD BANK)`,
     tender_ref: `REF/${id}`,
     close_at: "2026-11-30 11:00:00",
     procurement_category_id: 2,
@@ -159,6 +159,25 @@ const noWait = async () => {};
       scoreBatch: async () => [{ index: 0, fitScorePercent: 90 }],
     });
     assert.equal(db.added[0].suppressNotification, true);
+  });
+
+  await test("buyer policy: public tenders that aren't donor-funded are never scored or saved", async () => {
+    let prompt = "";
+    const db = fakeDb();
+    const result = await runPpipDiscovery({
+      db,
+      admin: fakeAdmin,
+      now: NOW,
+      logger: quietLogger,
+      wait: noWait,
+      buildProfile: async () => "PROFILE",
+      fetchImpl: fakeFetch([[record(30, { title: "SUPPLY OF CONDUCTORS FOR KETRACO" }), record(31)]]),
+      scoreBatch: async (p) => ((prompt = p), [{ index: 0, fitScorePercent: 90 }]),
+    });
+    assert.equal(prompt.includes("Ketraco") || prompt.includes("KETRACO"), false);
+    assert.equal(result.fetched, 1, "only the donor-funded tender is considered");
+    assert.equal(db.added.length, 1);
+    assert.equal(db.added[0].externalId, "ppip:31");
   });
 
   await test("a 429 is retried after waiting, then succeeds", async () => {
