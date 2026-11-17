@@ -474,7 +474,7 @@ exports.scheduledGrantDiscovery = onSchedule(
 
 /** Scheduled: runs the same discovery routine automatically every Monday. */
 exports.scheduledOpportunityDiscovery = onSchedule(
-  { schedule: "every monday 08:00", timeoutSeconds: 240 },
+  { schedule: "every monday 08:00", timeZone: "Africa/Nairobi", timeoutSeconds: 240 },
   async () => {
     await runOpportunityDiscovery();
   },
@@ -1331,7 +1331,7 @@ exports.generateRecommendations = onCall(
 );
 
 /** Scheduled: refreshes recommendations weekly, an hour after the discovery run so new opportunities are already in Firestore. */
-exports.scheduledRecommendationRefresh = onSchedule("every monday 09:00", async () => {
+exports.scheduledRecommendationRefresh = onSchedule({ schedule: "every monday 09:00", timeZone: "Africa/Nairobi" }, async () => {
   await runRecommendationGeneration();
 });
 

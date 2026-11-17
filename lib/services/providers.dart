@@ -9,6 +9,7 @@ export 'core/auth_providers.dart';
 export 'core/settings_providers.dart';
 export 'core/navigation_providers.dart';
 export 'core/notification_providers.dart';
+export 'opportunities/inbox_view.dart';
 export 'opportunities/opportunity_providers.dart';
 export 'proposals/proposal_providers.dart';
 export 'submissions/submission_providers.dart';

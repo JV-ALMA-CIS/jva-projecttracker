@@ -763,6 +763,15 @@ class AppStrings {
 
   // Opportunity Discovery Engine (Milestone 3.7)
   String get inboxTitle => _it ? 'Posta in arrivo' : 'Opportunity Inbox';
+  String get inboxAllBusinessUnits => _it ? 'Tutte' : 'All';
+  String get inboxSliceEmpty => _it
+      ? 'Niente da valutare qui al momento.'
+      : 'Nothing to review here right now.';
+  String closesInLabel(int days) => days <= 0
+      ? (_it ? 'Scade oggi' : 'Closes today')
+      : days == 1
+      ? (_it ? 'Scade domani' : 'Closes tomorrow')
+      : (_it ? 'Scade tra $days giorni' : 'Closes in $days days');
   String get inboxTooltip => _it ? 'Posta in arrivo' : 'Inbox';
   String get inboxEmptyMessage => _it
       ? 'Nessuna opportunità in attesa di revisione.'

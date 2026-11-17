@@ -11,6 +11,7 @@ import 'package:jva_projecttracker/services/executive_intelligence_service.dart'
 import 'package:jva_projecttracker/services/match_analysis_service.dart';
 import 'package:jva_projecttracker/services/opportunity_business_unit_backfill_service.dart';
 import 'package:jva_projecttracker/services/opportunity_event_service.dart';
+import 'package:jva_projecttracker/services/opportunities/inbox_view.dart';
 import 'package:jva_projecttracker/services/opportunity_filters.dart';
 import 'package:jva_projecttracker/services/opportunity_service.dart';
 import 'package:jva_projecttracker/services/source_url_verification_service.dart';
@@ -127,15 +128,19 @@ final recentOpportunityEventsProvider = StreamProvider<List<OpportunityEvent>>((
 });
 
 /// The Opportunity Inbox's contents — opportunities still awaiting triage
-/// (`status == discovered`), newest first. Derived from
-/// [opportunitiesStreamProvider] rather than a second Firestore query, same
-/// "derive from the raw stream" idiom as [pipelineStageCountsProvider].
+/// (`status == discovered`) whose deadline hasn't passed, best match first
+/// (see [compareForInbox]). Closed items drop out on their own, so the
+/// Inbox never fills up with tenders nobody can bid on any more. Derived
+/// from [opportunitiesStreamProvider] rather than a second Firestore query.
 final inboxOpportunitiesProvider = Provider<List<Opportunity>>((ref) {
   final all = ref.watch(opportunitiesStreamProvider).value ?? const [];
+  final now = DateTime.now();
   final discovered = all
-      .where((o) => o.status == OpportunityStatus.discovered)
+      .where(
+        (o) => o.status == OpportunityStatus.discovered && isStillOpen(o, now),
+      )
       .toList();
-  discovered.sort((a, b) => b.discoveredAt.compareTo(a.discoveredAt));
+  discovered.sort(compareForInbox);
   return discovered;
 });
 
