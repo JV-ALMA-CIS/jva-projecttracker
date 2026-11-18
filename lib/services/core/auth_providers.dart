@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jva_projecttracker/models/device_registration.dart';
 import 'package:jva_projecttracker/models/user_profile.dart';
 import 'package:jva_projecttracker/services/auth_service.dart';
 import 'package:jva_projecttracker/services/fcm_token_service.dart';
@@ -19,4 +20,11 @@ final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) {
   final user = ref.watch(authStateChangesProvider).value;
   if (user == null) return Stream.value(null);
   return ref.watch(userServiceProvider).watch(user.uid);
+});
+
+/// The signed-in person's devices registered for push alerts.
+final myDevicesProvider = StreamProvider<List<DeviceRegistration>>((ref) {
+  final user = ref.watch(authStateChangesProvider).value;
+  if (user == null) return Stream.value(const <DeviceRegistration>[]);
+  return ref.watch(fcmTokenServiceProvider).watchMyDevices(user.uid);
 });

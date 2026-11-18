@@ -1503,10 +1503,62 @@ class AppStrings {
   // Settings — push notifications
   String get sectionNotifications => _it ? 'Notifiche' : 'Notifications';
   String get notificationsExplainer => _it
-      ? 'Ricevi un avviso su questo dispositivo quando viene trovata una nuova '
-            'opportunità con corrispondenza pari o superiore al 70%.'
-      : 'Get an alert on this device whenever a new opportunity with a '
-            '70%+ match is found.';
+      ? 'Gli avvisi per nuove gare, bandi e call, le scadenze e le '
+            'segnalazioni dei colleghi arrivano su ogni computer e telefono '
+            'dove hai effettuato l\'accesso e consentito le notifiche.'
+      : 'Alerts for new tenders, grants and calls, deadline reminders and '
+            'colleagues\' shares arrive on every computer and phone where '
+            'you\'ve signed in and allowed notifications.';
+  String get myDevicesTitle => _it
+      ? 'I tuoi dispositivi che ricevono avvisi'
+      : 'Your devices getting alerts';
+  String get noDevicesYet => _it
+      ? 'Nessun dispositivo registrato: non riceverai avvisi. Premi '
+            '"Invia notifica di prova" su ogni computer e telefono che usi.'
+      : 'No device registered — you won\'t get any alerts. Press "Send test '
+            'notification" on each computer and phone you use.';
+  String get thisDeviceLabel => _it ? 'Questo dispositivo' : 'This device';
+  String deviceRegisteredLine(String when) =>
+      _it ? 'Registrato $when' : 'Registered $when';
+  String deviceLastAlertLine(String when) =>
+      _it ? 'Ultimo avviso inviato $when' : 'Last alert sent $when';
+  String get deviceNoAlertYet =>
+      _it ? 'Nessun avviso ancora inviato' : 'No alert sent yet';
+  String relativeWhen(DateTime when, DateTime now) {
+    final Duration diff = now.difference(when);
+    if (diff.inMinutes < 1) return _it ? 'adesso' : 'just now';
+    if (diff.inHours < 1) {
+      return _it ? '${diff.inMinutes} min fa' : '${diff.inMinutes} min ago';
+    }
+    if (diff.inDays < 1) {
+      return _it ? '${diff.inHours} h fa' : '${diff.inHours} h ago';
+    }
+    if (diff.inDays == 1) return _it ? 'ieri' : 'yesterday';
+    if (diff.inDays < 30) {
+      return _it ? '${diff.inDays} giorni fa' : '${diff.inDays} days ago';
+    }
+    return '${when.day}/${when.month}/${when.year}';
+  }
+
+  String get teamReachabilityTitle =>
+      _it ? 'Team: chi riceve gli avvisi' : 'Team: who gets alerts';
+  String get teamReachabilityExplainer => _it
+      ? 'Ogni account del team e i dispositivi su cui riceve avvisi. Chi ha '
+            '"nessun dispositivo" non riceve nulla finché non accede e '
+            'consente le notifiche.'
+      : 'Every team account and the devices it gets alerts on. Anyone with '
+            '"no device" gets nothing until they sign in and allow '
+            'notifications.';
+  String get checkTeamReachabilityButton =>
+      _it ? 'Controlla chi riceve gli avvisi' : 'Check who gets alerts';
+  String get personNoDevices =>
+      _it ? 'Nessun dispositivo — nessun avviso' : 'No device — gets no alerts';
+  String personDeviceCount(int n) => _it
+      ? (n == 1 ? '1 dispositivo' : '$n dispositivi')
+      : (n == 1 ? '1 device' : '$n devices');
+  String get neverSignedIn => _it ? 'mai entrato' : 'never signed in';
+  String lastSignInLine(String when) =>
+      _it ? 'ultimo accesso $when' : 'last sign-in $when';
   String get sendTestNotificationButton =>
       _it ? 'Invia notifica di prova' : 'Send test notification';
   String testNotificationResult(TestNotificationOutcome outcome) {

@@ -18,18 +18,18 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="JVA's internal tracker for tenders, grants, projects and company applications.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="jva_projecttracker">
+  <meta name="apple-mobile-web-app-title" content="JVA Tracker">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>jva_projecttracker</title>
+  <title>JVA Project Tracker</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -44,15 +44,26 @@
   <script src="flutter_bootstrap.js" async></script>
 
   <!--
-    Registered explicitly (rather than relying on firebase_messaging_web's
-    own auto-registration) so background/closed-tab push notifications work
-    regardless of plugin version — see web/firebase-messaging-sw.js. A
-    duplicate registration at the same scope is a harmless no-op if the
-    plugin also registers it.
+    Push service worker (web/firebase-messaging-sw.js), registered in the
+    scope the Firebase Messaging SDK itself uses
+    ("/firebase-cloud-messaging-push-scope"), so it never competes with
+    Flutter's own service worker at "/". Older versions of this page
+    registered it at "/", which made the two keep replacing each other —
+    those stray registrations are removed here.
   -->
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('firebase-messaging-sw.js');
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) {
+          var w = reg.active || reg.waiting || reg.installing;
+          var isMessagingSw = w && /firebase-messaging-sw\.js$/.test(w.scriptURL);
+          var isPushScope = /firebase-cloud-messaging-push-scope/.test(reg.scope);
+          if (isMessagingSw && !isPushScope) reg.unregister();
+        });
+      }).catch(function () {});
+      navigator.serviceWorker
+        .register('firebase-messaging-sw.js', { scope: 'firebase-cloud-messaging-push-scope' })
+        .catch(function () {});
     }
   </script>
 </body>

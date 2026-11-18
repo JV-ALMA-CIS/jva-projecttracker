@@ -1,11 +1,11 @@
 {
-    "name": "jva_projecttracker",
-    "short_name": "jva_projecttracker",
+    "name": "JVA Project Tracker",
+    "short_name": "JVA Tracker",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "JVA's internal tracker for tenders, grants, projects and company applications.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

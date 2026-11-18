@@ -28,6 +28,22 @@ service cloud.firestore {
       }
     }
 
+    // Push device registry — one doc per FCM token (token = doc id), tagged
+    // with its owner `uid`. Replaces users/{uid}/fcmTokens (still allowed
+    // above for older app builds; the server moves those here on each send).
+    // A device may be re-claimed by whoever is signed in on it now (writes
+    // must name the caller as owner); tokens can't be read by anyone else,
+    // so they can't be guessed. lastSentAt/lastSentType are written by the
+    // Cloud Functions (Admin SDK). Admins can read all, for "who's reachable".
+    match /deviceTokens/{token} {
+      allow read: if isAuthenticated()
+        && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create, update: if isAuthenticated()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.token == token;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
     // Internal tool: any authenticated JVA staff account may read/write.
     match /projects/{projectId} {
       allow read, write: if isAuthenticated();

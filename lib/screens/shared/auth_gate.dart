@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
@@ -22,7 +24,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   // including switching accounts) should re-trigger them.
   String? _handledUid;
 
-  void _handleSignedIn(String uid) {
+  void _handleSignedIn(String uid, String? email) {
     if (_handledUid == uid) return;
     _handledUid = uid;
 
@@ -32,12 +34,17 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       () =>
           ref.read(authLandingProvider.notifier).landing = AuthLanding.welcome,
     );
-    // Foundation for a future ≥70% match-score push — request permission
-    // and save this device's FCM token now that we know who's signed in.
-    // Fire-and-forget: a denied permission or a save failure shouldn't
-    // block reaching HomeShell, and there's nothing actionable for the
-    // user to do about it yet (no push feature exists to explain why
-    // permission matters).
+    // Make sure this account has a profile doc (accounts created outside
+    // the sign-up screen don't), then register this device for tender/grant
+    // alerts. Fire-and-forget: neither should block reaching HomeShell, and
+    // registration retries on its own if the network is down.
+    Future.microtask(() async {
+      try {
+        await ref.read(userServiceProvider).ensureOwnProfile(uid, email);
+      } catch (e) {
+        developer.log('ensureOwnProfile failed', name: 'AuthGate', error: e);
+      }
+    });
     Future.microtask(
       () =>
           ref.read(fcmTokenServiceProvider).requestPermissionAndSaveToken(uid),
@@ -52,7 +59,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     return authState.when(
       data: (user) {
         if (user != null) {
-          _handleSignedIn(user.uid);
+          _handleSignedIn(user.uid, user.email);
           return const HomeShell();
         }
         _handledUid = null;

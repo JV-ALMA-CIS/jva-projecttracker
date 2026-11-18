@@ -212,43 +212,99 @@ function buildNotificationMessage(
   };
 }
 
+/** Top-level device registry: one doc per FCM token, `{token, uid, platform, os, updatedAt, lastSentAt?}`. */
+const DEVICE_TOKENS = "deviceTokens";
+/** Old per-user location (`users/{uid}/fcmTokens/{token}`), still written by older app builds. */
+const LEGACY_TOKENS = "fcmTokens";
+
 /**
- * Every saved FCM token for every user, deduplicated by token — the whole
- * team should see every qualifying tender (this is an internal tool used
- * only by company staff, so there is no narrower audience to target). Each
- * entry carries the token's Firestore `ref` so [sendToTokens] can delete
- * tokens FCM reports as permanently invalid. Returns `[]` (never throws) if
- * there are no users or no tokens anywhere — the caller logs and exits
- * cleanly in that case.
+ * Every registered device for every signed-up employee, deduplicated by
+ * token — the whole team sees every qualifying tender (internal tool, no
+ * narrower audience). Each entry is `{token, uid, ref, legacyRef?}`; `ref`
+ * is the `deviceTokens` doc so [sendToTokens] can delete dead tokens and
+ * record the last send.
  *
- * Pass [uid] to collect only that one user's tokens (used by the
- * sendTestNotification callable).
+ * Devices are read straight from the top-level `deviceTokens` registry, so
+ * an account is reachable whether or not it has a `users/{uid}` profile doc.
+ * (The old lookup walked `users` docs first, and Firestore never lists a
+ * parent doc that doesn't exist, so any account without a profile silently
+ * got no pushes.) Old-location tokens are found with a collection-group
+ * query (which does see orphaned subcollections), moved into `deviceTokens`,
+ * and still included in this send — older APKs keep writing there until
+ * they're updated, so this keeps running on every send.
+ *
+ * Pass [uid] for one person's devices (sendTestNotification), [excludeUid]
+ * to skip one person (team shares skip the sharer). Never returns duplicates.
  */
 async function collectRecipientTokens(firestoreDb = db(), { uid, excludeUid } = {}) {
-  let userRefs;
-  if (uid) {
-    userRefs = [firestoreDb.collection("users").doc(uid)];
-  } else {
-    const usersSnap = await firestoreDb.collection("users").get();
-    if (usersSnap.empty) return [];
-    userRefs = usersSnap.docs.filter((d) => d.id !== excludeUid).map((d) => d.ref);
+  const registry = firestoreDb.collection(DEVICE_TOKENS);
+  const [deviceSnap, legacySnap] = await Promise.all([
+    (uid ? registry.where("uid", "==", uid) : registry).get(),
+    firestoreDb.collectionGroup(LEGACY_TOKENS).get(),
+  ]);
+  const wanted = (owner) => !!owner && (!uid || owner === uid) && owner !== excludeUid;
+
+  const byToken = new Map();
+  for (const d of deviceSnap.docs) {
+    const owner = d.data().uid;
+    if (wanted(owner)) byToken.set(d.id, { token: d.id, uid: owner, ref: d.ref });
   }
 
-  const tokenLists = await Promise.all(
-    userRefs.map(async (userRef) => {
-      const tokensSnap = await userRef.collection("fcmTokens").get();
-      return tokensSnap.docs.map((d) => ({ token: d.id, ref: d.ref }));
-    }),
-  );
-
-  const seen = new Set();
-  const result = [];
-  for (const entry of tokenLists.flat()) {
-    if (seen.has(entry.token)) continue;
-    seen.add(entry.token);
-    result.push(entry);
+  const moves = [];
+  for (const d of legacySnap.docs) {
+    const owner = d.ref.parent?.parent?.id;
+    if (!owner) continue;
+    const token = d.id;
+    const target = registry.doc(token);
+    moves.push(moveLegacyToken(d, target, owner));
+    if (!wanted(owner)) continue;
+    const existing = byToken.get(token);
+    if (existing) {
+      existing.legacyRef = d.ref;
+    } else {
+      byToken.set(token, { token, uid: owner, ref: target, legacyRef: d.ref });
+    }
   }
-  return result;
+  if (moves.length > 0) {
+    const results = await Promise.all(moves);
+    const moved = results.filter(Boolean).length;
+    if (moved > 0) logger.info(`collectRecipientTokens: moved ${moved} device(s) into ${DEVICE_TOKENS}`);
+  }
+  return [...byToken.values()];
+}
+
+/**
+ * Copies one old-location token into `deviceTokens` (unless that token is
+ * already registered there — the registry copy is always the newer one),
+ * then deletes the old doc. Returns true if a new registry doc was written.
+ * Never throws.
+ */
+async function moveLegacyToken(legacyDoc, target, owner) {
+  let created = false;
+  try {
+    const data = legacyDoc.data ? legacyDoc.data() || {} : {};
+    await target.create({
+      token: legacyDoc.id,
+      uid: owner,
+      platform: "unknown",
+      os: "unknown",
+      updatedAt: data.updatedAt || new Date(),
+      movedFromLegacyAt: new Date(),
+    });
+    created = true;
+  } catch (e) {
+    // ALREADY_EXISTS (gRPC code 6) just means the registry already has it.
+    if (e?.code !== 6 && e?.code !== "already-exists") {
+      logger.warn(`moveLegacyToken: could not copy a device for ${owner}: ${e?.message || e}`);
+      return false;
+    }
+  }
+  try {
+    await legacyDoc.ref.delete();
+  } catch (_) {
+    // Harmless: it will be found and skipped again next send.
+  }
+  return created;
 }
 
 /** FCM error codes meaning the token will never work again and should be removed. */
@@ -279,17 +335,32 @@ async function sendToTokens(recipients, payload, messagingClient = admin.messagi
     failureCount += response.failureCount;
 
     const staleDeletes = [];
+    const sentMarks = [];
+    const sentAt = new Date();
     response.responses.forEach((result, j) => {
-      if (result.success) return;
+      const entry = chunk[j];
+      if (result.success) {
+        // Shown in Settings → "My devices" as "last alert sent". Best-effort.
+        if (entry.ref?.update) {
+          sentMarks.push(
+            Promise.resolve(entry.ref.update({ lastSentAt: sentAt, lastSentType: payload.type || "matchScore" })).catch(
+              () => {},
+            ),
+          );
+        }
+        return;
+      }
       const code = result.error?.code || result.error?.message || "unknown error";
-      logger.warn(`push to token ${String(chunk[j].token).slice(0, 12)}… failed: ${code}`);
-      if (STALE_TOKEN_ERROR_CODES.has(code) && chunk[j].ref) {
-        staleDeletes.push(Promise.resolve(chunk[j].ref.delete()).catch(() => {}));
+      logger.warn(`push to token ${String(entry.token).slice(0, 12)}… failed: ${code}`);
+      if (!STALE_TOKEN_ERROR_CODES.has(code)) return;
+      for (const ref of [entry.ref, entry.legacyRef]) {
+        if (ref?.delete) staleDeletes.push(Promise.resolve(ref.delete()).catch(() => {}));
       }
     });
+    await Promise.all(sentMarks);
     if (staleDeletes.length > 0) {
       await Promise.all(staleDeletes);
-      logger.info(`removed ${staleDeletes.length} stale FCM token(s)`);
+      logger.info(`removed ${staleDeletes.length} stale FCM token doc(s)`);
     }
   }
 
@@ -375,6 +446,7 @@ module.exports.matchNotifyScoreFor = matchNotifyScoreFor;
 module.exports.shouldSendMatchScorePush = shouldSendMatchScorePush;
 module.exports.buildNotificationMessage = buildNotificationMessage;
 module.exports.collectRecipientTokens = collectRecipientTokens;
+module.exports.DEVICE_TOKENS = DEVICE_TOKENS;
 module.exports.sendToTokens = sendToTokens;
 module.exports.notifyAllUsers = notifyAllUsers;
 module.exports.MATCH_SCORE_NOTIFY_THRESHOLD = MATCH_SCORE_NOTIFY_THRESHOLD;

@@ -1,9 +1,12 @@
 import 'dart:developer' as developer;
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
+import 'package:jva_projecttracker/models/device_registration.dart';
+import 'package:jva_projecttracker/models/user_profile.dart';
 import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/theme/app_font.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
@@ -127,11 +130,24 @@ class SettingsScreen extends ConsumerWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 12),
-                  if (user != null) _TestNotificationButton(uid: user.uid),
+                  if (user != null) ...[
+                    _TestNotificationButton(uid: user.uid),
+                    const SizedBox(height: 16),
+                    const _MyDevicesList(),
+                  ],
                 ],
               ),
             ),
           ),
+          if (profile?.role == UserRole.admin) ...[
+            const SizedBox(height: 12),
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: _TeamReachability(),
+              ),
+            ),
+          ],
           const SizedBox(height: 28),
           SectionHeader(
             title: strings.sectionProfile,
@@ -245,6 +261,202 @@ class _TestNotificationButtonState
             )
           : const Icon(Icons.notifications_active_outlined),
       label: Text(strings.sendTestNotificationButton),
+    );
+  }
+}
+
+/// The signed-in person's registered devices, so they can see at a glance
+/// whether their desk computer and phone will actually get alerts.
+class _MyDevicesList extends ConsumerWidget {
+  const _MyDevicesList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
+    final theme = Theme.of(context);
+    final devices = ref.watch(myDevicesProvider);
+    final currentToken = ref.watch(fcmTokenServiceProvider).currentToken;
+    final DateTime now = DateTime.now();
+
+    final List<DeviceRegistration>? list = devices.value;
+    if (list == null) {
+      if (devices.hasError) return const SizedBox.shrink();
+      return const LinearProgressIndicator();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(strings.myDevicesTitle, style: theme.textTheme.labelLarge),
+        const SizedBox(height: 4),
+        if (list.isEmpty)
+          Text(
+            strings.noDevicesYet,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        for (final DeviceRegistration d in list)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            leading: Icon(
+              d.isWeb ? Icons.computer_outlined : Icons.smartphone_outlined,
+            ),
+            title: Text(
+              d.token == currentToken
+                  ? '${deviceLabel(d.platform, d.os)} · '
+                        '${strings.thisDeviceLabel}'
+                  : deviceLabel(d.platform, d.os),
+            ),
+            subtitle: Text(
+              [
+                if (d.updatedAt != null)
+                  strings.deviceRegisteredLine(
+                    strings.relativeWhen(d.updatedAt!, now),
+                  ),
+                d.lastSentAt == null
+                    ? strings.deviceNoAlertYet
+                    : strings.deviceLastAlertLine(
+                        strings.relativeWhen(d.lastSentAt!, now),
+                      ),
+              ].join(' · '),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Admin-only: every team sign-in account and how many devices it gets
+/// alerts on (`notificationReachability` Cloud Function), people with none
+/// first — so an admin can chase whoever would miss a tender.
+class _TeamReachability extends ConsumerStatefulWidget {
+  const _TeamReachability();
+
+  @override
+  ConsumerState<_TeamReachability> createState() => _TeamReachabilityState();
+}
+
+class _TeamReachabilityState extends ConsumerState<_TeamReachability> {
+  bool _loading = false;
+  List<Map<String, dynamic>>? _people;
+  String? _error;
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('notificationReachability')
+          .call<Map<String, dynamic>>();
+      final List<Object?> raw =
+          (result.data['people'] as List<Object?>?) ?? const [];
+      if (!mounted) return;
+      setState(() {
+        _people = raw
+            .whereType<Map<Object?, Object?>>()
+            .map(Map<String, dynamic>.from)
+            .toList();
+      });
+    } catch (e) {
+      developer.log(
+        'notificationReachability failed',
+        name: 'Settings',
+        error: e,
+      );
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = ref.watch(appStringsProvider);
+    final theme = Theme.of(context);
+    final DateTime now = DateTime.now();
+    final List<Map<String, dynamic>>? people = _people;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(strings.teamReachabilityTitle, style: theme.textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Text(
+          strings.teamReachabilityExplainer,
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _loading ? null : _load,
+          icon: _loading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.groups_outlined),
+          label: Text(strings.checkTeamReachabilityButton),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            strings.errorPrefix(_error!),
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
+        ],
+        if (people != null)
+          for (final Map<String, dynamic> p in people)
+            _PersonReachabilityTile(person: p, now: now),
+      ],
+    );
+  }
+}
+
+class _PersonReachabilityTile extends ConsumerWidget {
+  const _PersonReachabilityTile({required this.person, required this.now});
+
+  final Map<String, dynamic> person;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
+    final theme = Theme.of(context);
+    final List<Map<String, dynamic>> devices =
+        ((person['devices'] as List<Object?>?) ?? const [])
+            .whereType<Map<Object?, Object?>>()
+            .map(Map<String, dynamic>.from)
+            .toList();
+    final String name = (person['name'] as String?) ?? '';
+    final String email = (person['email'] as String?) ?? '';
+    final DateTime? lastSignIn = DateTime.tryParse(
+      (person['lastSignInAt'] as String?) ?? '',
+    );
+    final bool reachable = devices.isNotEmpty;
+
+    final String deviceSummary = reachable
+        ? '${strings.personDeviceCount(devices.length)}: '
+              '${devices.map((d) => deviceLabel('${d['platform']}', '${d['os']}')).join(', ')}'
+        : strings.personNoDevices;
+    final String signIn = lastSignIn == null
+        ? strings.neverSignedIn
+        : strings.lastSignInLine(strings.relativeWhen(lastSignIn, now));
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      leading: Icon(
+        reachable
+            ? Icons.notifications_active_outlined
+            : Icons.notifications_off_outlined,
+        color: reachable ? AppStatusColors.success : theme.colorScheme.error,
+      ),
+      title: Text(name.isNotEmpty ? '$name · $email' : email),
+      subtitle: Text('$deviceSummary · $signIn'),
     );
   }
 }

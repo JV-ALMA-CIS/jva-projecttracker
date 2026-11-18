@@ -242,41 +242,77 @@ test("deadline copy says 'in N days', 'tomorrow' and 'today'", () => {
 // --- collectRecipientTokens ------------------------------------------------
 
 /**
- * Minimal fake Firestore shaped exactly like collectRecipientTokens uses it:
- * db.collection("users").get() -> docs with .ref; .doc(uid) -> a ref;
- * ref.collection("fcmTokens").get() -> docs with .id and .ref.delete().
- * [users] is a list of {id, role, tokens: [tokenId, ...]}. Deleted token ids
- * are recorded in the returned `deleted` array.
+ * Minimal fake Firestore shaped like collectRecipientTokens uses it:
+ * - collection("deviceTokens"): get(), where("uid","==",x).get(), doc(id)
+ *   with create()/update()/delete();
+ * - collectionGroup("fcmTokens").get(): old-location docs whose
+ *   ref.parent.parent.id is the owner uid (the owner's users doc need not exist).
+ * [devices] is [{token, uid}], [legacy] is [{token, uid}].
  */
-function fakeUsersDb(users) {
+function fakeRegistryDb({ devices = [], legacy = [] } = {}) {
+  const registry = new Map(devices.map((d) => [d.token, { ...d }]));
+  const legacyDocs = legacy.map((l) => ({ ...l, alive: true }));
   const deleted = [];
-  const userRef = (u) => ({
-    collection(sub) {
-      assert.equal(sub, "fcmTokens");
+  const updates = [];
+  const deviceRef = (id) => ({
+    id,
+    async create(data) {
+      if (registry.has(id)) {
+        const e = new Error("exists");
+        e.code = 6;
+        throw e;
+      }
+      registry.set(id, { ...data });
+    },
+    async update(data) {
+      updates.push({ id, ...data });
+    },
+    async delete() {
+      deleted.push(id);
+      registry.delete(id);
+    },
+  });
+  const snapOf = (entries) => ({
+    empty: entries.length === 0,
+    docs: entries.map(([id, data]) => ({ id, data: () => data, ref: deviceRef(id) })),
+  });
+  return {
+    registry,
+    legacyDocs,
+    deleted,
+    updates,
+    collection(name) {
+      assert.equal(name, "deviceTokens");
       return {
+        doc: deviceRef,
         async get() {
-          return {
-            docs: (u.tokens || []).map((t) => ({
-              id: t,
-              ref: { async delete() { deleted.push(t); } },
-            })),
-          };
+          return snapOf([...registry.entries()]);
+        },
+        where(field, op, value) {
+          assert.equal(field, "uid");
+          assert.equal(op, "==");
+          return { get: async () => snapOf([...registry.entries()].filter(([, d]) => d.uid === value)) };
         },
       };
     },
-  });
-  return {
-    deleted,
-    collection(name) {
-      assert.equal(name, "users");
+    collectionGroup(name) {
+      assert.equal(name, "fcmTokens");
       return {
-        doc(id) {
-          return userRef(users.find((u) => u.id === id) || { id, tokens: [] });
-        },
         async get() {
           return {
-            empty: users.length === 0,
-            docs: users.map((u) => ({ id: u.id, data: () => ({ role: u.role }), ref: userRef(u) })),
+            docs: legacyDocs
+              .filter((l) => l.alive)
+              .map((l) => ({
+                id: l.token,
+                data: () => ({ token: l.token }),
+                ref: {
+                  parent: { id: "fcmTokens", parent: { id: l.uid } },
+                  async delete() {
+                    l.alive = false;
+                    deleted.push(`legacy:${l.token}`);
+                  },
+                },
+              })),
           };
         },
       };
@@ -287,53 +323,66 @@ function fakeUsersDb(users) {
 const tokensOf = (recipients) => recipients.map((r) => r.token).sort();
 
 (async () => {
+  await asyncTest("collectRecipientTokens returns every registered device regardless of role", async () => {
+    const db = fakeRegistryDb({
+      devices: [
+        { token: "t1", uid: "u1" },
+        { token: "t2", uid: "u1" },
+        { token: "t3", uid: "u2" },
+      ],
+    });
+    assert.deepEqual(tokensOf(await collectRecipientTokens(db)), ["t1", "t2", "t3"]);
+  });
+
   await asyncTest(
-    "collectRecipientTokens returns every user's tokens regardless of role",
+    "collectRecipientTokens reaches accounts with no users profile doc (old-location tokens are found and moved)",
     async () => {
-      const db = fakeUsersDb([
-        { id: "u1", role: "admin", tokens: ["t1", "t2"] },
-        { id: "u2", role: "user", tokens: ["t3"] },
-      ]);
-      assert.deepEqual(tokensOf(await collectRecipientTokens(db)), ["t1", "t2", "t3"]);
+      const db = fakeRegistryDb({ legacy: [{ token: "orphan", uid: "no-profile-user" }] });
+      const recipients = await collectRecipientTokens(db);
+      assert.deepEqual(tokensOf(recipients), ["orphan"]);
+      assert.equal(recipients[0].uid, "no-profile-user");
+      assert.equal(db.registry.get("orphan").uid, "no-profile-user");
+      assert.deepEqual(db.deleted, ["legacy:orphan"]);
+      // Next send reads it from the registry only.
+      assert.deepEqual(tokensOf(await collectRecipientTokens(db)), ["orphan"]);
     },
   );
 
-  await asyncTest(
-    "collectRecipientTokens deduplicates a token saved under two accounts",
-    async () => {
-      const db = fakeUsersDb([
-        { id: "u1", role: "user", tokens: ["shared"] },
-        { id: "u2", role: "user", tokens: ["shared", "t2"] },
-      ]);
-      assert.deepEqual(tokensOf(await collectRecipientTokens(db)), ["shared", "t2"]);
-    },
-  );
+  await asyncTest("collectRecipientTokens keeps the registry owner when a token exists in both places", async () => {
+    const db = fakeRegistryDb({
+      devices: [{ token: "shared", uid: "u2" }],
+      legacy: [{ token: "shared", uid: "u1" }],
+    });
+    const recipients = await collectRecipientTokens(db);
+    assert.deepEqual(tokensOf(recipients), ["shared"]);
+    assert.equal(db.registry.get("shared").uid, "u2");
+    assert.deepEqual(db.deleted, ["legacy:shared"]);
+  });
 
-  await asyncTest(
-    "collectRecipientTokens with a uid returns only that user's tokens",
-    async () => {
-      const db = fakeUsersDb([
-        { id: "u1", role: "user", tokens: ["t1"] },
-        { id: "u2", role: "user", tokens: ["t2"] },
-      ]);
-      assert.deepEqual(tokensOf(await collectRecipientTokens(db, { uid: "u2" })), ["t2"]);
-    },
-  );
+  await asyncTest("collectRecipientTokens with a uid returns only that user's devices", async () => {
+    const db = fakeRegistryDb({
+      devices: [
+        { token: "t1", uid: "u1" },
+        { token: "t2", uid: "u2" },
+      ],
+      legacy: [{ token: "old2", uid: "u2" }, { token: "old1", uid: "u1" }],
+    });
+    assert.deepEqual(tokensOf(await collectRecipientTokens(db, { uid: "u2" })), ["old2", "t2"]);
+  });
 
-  await asyncTest(
-    "collectRecipientTokens returns [] when the users collection is empty",
-    async () => {
-      assert.deepEqual(await collectRecipientTokens(fakeUsersDb([])), []);
-    },
-  );
+  await asyncTest("collectRecipientTokens skips excludeUid", async () => {
+    const db = fakeRegistryDb({
+      devices: [
+        { token: "t1", uid: "u1" },
+        { token: "t2", uid: "u2" },
+      ],
+    });
+    assert.deepEqual(tokensOf(await collectRecipientTokens(db, { excludeUid: "u1" })), ["t2"]);
+  });
 
-  await asyncTest(
-    "collectRecipientTokens returns [] when users exist but none have saved a token",
-    async () => {
-      const db = fakeUsersDb([{ id: "u1", role: "admin", tokens: [] }]);
-      assert.deepEqual(await collectRecipientTokens(db), []);
-    },
-  );
+  await asyncTest("collectRecipientTokens returns [] when nothing is registered", async () => {
+    assert.deepEqual(await collectRecipientTokens(fakeRegistryDb()), []);
+  });
 
   // --- sendToTokens --------------------------------------------------------
 
@@ -416,10 +465,12 @@ const tokensOf = (recipients) => recipients.map((r) => r.token).sort();
   await asyncTest(
     "notifyAllUsers sends a newOpportunity push to every user's devices",
     async () => {
-      const db = fakeUsersDb([
-        { id: "u1", role: "admin", tokens: ["t1"] },
-        { id: "u2", role: "user", tokens: ["t2"] },
-      ]);
+      const db = fakeRegistryDb({
+        devices: [
+          { token: "t1", uid: "u1" },
+          { token: "t2", uid: "u2" },
+        ],
+      });
       let sent;
       const fakeMessaging = {
         async sendEach(messages) {
@@ -434,13 +485,15 @@ const tokensOf = (recipients) => recipients.map((r) => r.token).sort();
       assert.deepEqual(result, { successCount: 2, failureCount: 0 });
       assert.deepEqual(sent.map((m) => m.token).sort(), ["t1", "t2"]);
       assert.equal(sent[0].data.type, "newOpportunity");
+      assert.deepEqual(db.updates.map((u) => u.id).sort(), ["t1", "t2"]);
+      assert.equal(db.updates[0].lastSentType, "newOpportunity");
     },
   );
 
   await asyncTest(
     "notifyAllUsers never throws when messaging fails outright",
     async () => {
-      const db = fakeUsersDb([{ id: "u1", role: "user", tokens: ["t1"] }]);
+      const db = fakeRegistryDb({ devices: [{ token: "t1", uid: "u1" }] });
       const fakeMessaging = { async sendEach() { throw new Error("FCM down"); } };
       const result = await notifyAllUsers(
         { type: "newOpportunity", opportunityId: "opp-1", score: 90 },

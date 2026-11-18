@@ -30,9 +30,12 @@ void main() {
   }
 
   test(
-    'saves the token at users/{uid}/fcmTokens/{token} when permission is authorized',
+    'saves the token at deviceTokens/{token} with owner, platform and OS when permission is authorized',
     () async {
       final service = FcmTokenService(
+        platform: 'web',
+        os: 'windows',
+        delay: (_) async {},
         firestore: firestore,
         requestPermission: () async =>
             buildSettings(AuthorizationStatus.authorized),
@@ -43,19 +46,23 @@ void main() {
       await service.requestPermissionAndSaveToken('user-1');
 
       final doc = await firestore
-          .collection('users')
-          .doc('user-1')
-          .collection('fcmTokens')
+          .collection('deviceTokens')
           .doc('token-abc')
           .get();
       expect(doc.exists, isTrue);
       expect(doc.data()!['token'], 'token-abc');
       expect(doc.data()!['updatedAt'], isNotNull);
+      expect(doc.data()!['uid'], 'user-1');
+      expect(doc.data()!['platform'], 'web');
+      expect(doc.data()!['os'], 'windows');
     },
   );
 
   test('saves the token when permission is provisional', () async {
     final service = FcmTokenService(
+      platform: 'web',
+      os: 'windows',
+      delay: (_) async {},
       firestore: firestore,
       requestPermission: () async =>
           buildSettings(AuthorizationStatus.provisional),
@@ -66,9 +73,7 @@ void main() {
     await service.requestPermissionAndSaveToken('user-1');
 
     final doc = await firestore
-        .collection('users')
-        .doc('user-1')
-        .collection('fcmTokens')
+        .collection('deviceTokens')
         .doc('token-abc')
         .get();
     expect(doc.exists, isTrue);
@@ -76,6 +81,9 @@ void main() {
 
   test('does not save any token when permission is denied', () async {
     final service = FcmTokenService(
+      platform: 'web',
+      os: 'windows',
+      delay: (_) async {},
       firestore: firestore,
       requestPermission: () async => buildSettings(AuthorizationStatus.denied),
       getToken: () async => 'token-abc',
@@ -85,9 +93,8 @@ void main() {
     await service.requestPermissionAndSaveToken('user-1');
 
     final tokens = await firestore
-        .collection('users')
-        .doc('user-1')
-        .collection('fcmTokens')
+        .collection('deviceTokens')
+        .where('uid', isEqualTo: 'user-1')
         .get();
     expect(tokens.docs, isEmpty);
   });
@@ -96,6 +103,9 @@ void main() {
     'does not save any token when authorized but getToken returns null (e.g. web without a VAPID key)',
     () async {
       final service = FcmTokenService(
+        platform: 'web',
+        os: 'windows',
+        delay: (_) async {},
         firestore: firestore,
         requestPermission: () async =>
             buildSettings(AuthorizationStatus.authorized),
@@ -106,9 +116,8 @@ void main() {
       await service.requestPermissionAndSaveToken('user-1');
 
       final tokens = await firestore
-          .collection('users')
-          .doc('user-1')
-          .collection('fcmTokens')
+          .collection('deviceTokens')
+          .where('uid', isEqualTo: 'user-1')
           .get();
       expect(tokens.docs, isEmpty);
     },
@@ -118,6 +127,9 @@ void main() {
     'saving the same token twice for the same user overwrites rather than duplicating',
     () async {
       final service = FcmTokenService(
+        platform: 'web',
+        os: 'windows',
+        delay: (_) async {},
         firestore: firestore,
         requestPermission: () async =>
             buildSettings(AuthorizationStatus.authorized),
@@ -129,9 +141,8 @@ void main() {
       await service.requestPermissionAndSaveToken('user-1');
 
       final tokens = await firestore
-          .collection('users')
-          .doc('user-1')
-          .collection('fcmTokens')
+          .collection('deviceTokens')
+          .where('uid', isEqualTo: 'user-1')
           .get();
       expect(tokens.docs, hasLength(1));
     },
@@ -139,6 +150,9 @@ void main() {
 
   test('two different users saving tokens do not clobber each other', () async {
     final serviceForUser1 = FcmTokenService(
+      platform: 'web',
+      os: 'windows',
+      delay: (_) async {},
       firestore: firestore,
       requestPermission: () async =>
           buildSettings(AuthorizationStatus.authorized),
@@ -146,6 +160,9 @@ void main() {
       onTokenRefresh: const Stream<String>.empty(),
     );
     final serviceForUser2 = FcmTokenService(
+      platform: 'web',
+      os: 'windows',
+      delay: (_) async {},
       firestore: firestore,
       requestPermission: () async =>
           buildSettings(AuthorizationStatus.authorized),
@@ -157,14 +174,12 @@ void main() {
     await serviceForUser2.requestPermissionAndSaveToken('user-2');
 
     final user1Tokens = await firestore
-        .collection('users')
-        .doc('user-1')
-        .collection('fcmTokens')
+        .collection('deviceTokens')
+        .where('uid', isEqualTo: 'user-1')
         .get();
     final user2Tokens = await firestore
-        .collection('users')
-        .doc('user-2')
-        .collection('fcmTokens')
+        .collection('deviceTokens')
+        .where('uid', isEqualTo: 'user-2')
         .get();
     expect(user1Tokens.docs.single.id, 'token-user-1');
     expect(user2Tokens.docs.single.id, 'token-user-2');
@@ -174,6 +189,9 @@ void main() {
     final refreshController = StreamController<String>();
     addTearDown(refreshController.close);
     final service = FcmTokenService(
+      platform: 'web',
+      os: 'windows',
+      delay: (_) async {},
       firestore: firestore,
       requestPermission: () async =>
           buildSettings(AuthorizationStatus.authorized),
@@ -186,9 +204,8 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     final tokens = await firestore
-        .collection('users')
-        .doc('user-1')
-        .collection('fcmTokens')
+        .collection('deviceTokens')
+        .where('uid', isEqualTo: 'user-1')
         .get();
     expect(
       tokens.docs.map((d) => d.id),
@@ -199,6 +216,9 @@ void main() {
   test('deleteCurrentToken removes this device\'s token document', () async {
     var deleteTokenCalled = false;
     final service = FcmTokenService(
+      platform: 'web',
+      os: 'windows',
+      delay: (_) async {},
       firestore: firestore,
       requestPermission: () async =>
           buildSettings(AuthorizationStatus.authorized),
@@ -211,9 +231,8 @@ void main() {
     await service.deleteCurrentToken('user-1');
 
     final tokens = await firestore
-        .collection('users')
-        .doc('user-1')
-        .collection('fcmTokens')
+        .collection('deviceTokens')
+        .where('uid', isEqualTo: 'user-1')
         .get();
     expect(tokens.docs, isEmpty);
     expect(deleteTokenCalled, isTrue);
@@ -223,6 +242,9 @@ void main() {
     'deleteCurrentToken is a no-op when there is no current token',
     () async {
       final service = FcmTokenService(
+        platform: 'web',
+        os: 'windows',
+        delay: (_) async {},
         firestore: firestore,
         requestPermission: () async =>
             buildSettings(AuthorizationStatus.authorized),
@@ -234,13 +256,138 @@ void main() {
       await service.deleteCurrentToken('user-1');
 
       final tokens = await firestore
-          .collection('users')
-          .doc('user-1')
-          .collection('fcmTokens')
+          .collection('deviceTokens')
+          .where('uid', isEqualTo: 'user-1')
           .get();
       expect(tokens.docs, isEmpty);
     },
   );
+
+  test(
+    'a device re-registered by another account moves to that account',
+    () async {
+      FcmTokenService forUser(String uid) => FcmTokenService(
+        platform: 'web',
+        os: 'windows',
+        delay: (_) async {},
+        firestore: firestore,
+        requestPermission: () async =>
+            buildSettings(AuthorizationStatus.authorized),
+        getToken: () async => 'shared-pc',
+        onTokenRefresh: const Stream<String>.empty(),
+      );
+
+      await forUser('user-1').requestPermissionAndSaveToken('user-1');
+      await forUser('user-2').requestPermissionAndSaveToken('user-2');
+
+      final doc = await firestore
+          .collection('deviceTokens')
+          .doc('shared-pc')
+          .get();
+      expect(doc.data()!['uid'], 'user-2');
+    },
+  );
+
+  test('registering removes this device\'s old-location copy', () async {
+    await firestore
+        .collection('users')
+        .doc('user-1')
+        .collection('fcmTokens')
+        .doc('token-abc')
+        .set({'token': 'token-abc'});
+    final service = FcmTokenService(
+      platform: 'web',
+      os: 'windows',
+      delay: (_) async {},
+      firestore: firestore,
+      requestPermission: () async =>
+          buildSettings(AuthorizationStatus.authorized),
+      getToken: () async => 'token-abc',
+      onTokenRefresh: const Stream<String>.empty(),
+    );
+
+    await service.requestPermissionAndSaveToken('user-1');
+
+    final legacy = await firestore
+        .collection('users')
+        .doc('user-1')
+        .collection('fcmTokens')
+        .get();
+    expect(legacy.docs, isEmpty);
+    expect(service.currentToken, 'token-abc');
+  });
+
+  test('retries when getting the token fails, then registers', () async {
+    int calls = 0;
+    final List<Duration> waits = [];
+    final service = FcmTokenService(
+      platform: 'android',
+      os: 'android',
+      delay: (d) async => waits.add(d),
+      firestore: firestore,
+      requestPermission: () async =>
+          buildSettings(AuthorizationStatus.authorized),
+      getToken: () async {
+        calls++;
+        if (calls < 3) throw Exception('offline');
+        return 'token-late';
+      },
+      onTokenRefresh: const Stream<String>.empty(),
+    );
+
+    await service.requestPermissionAndSaveToken('user-1');
+
+    expect(waits, kRegistrationRetryDelays.take(2).toList());
+    final doc = await firestore
+        .collection('deviceTokens')
+        .doc('token-late')
+        .get();
+    expect(doc.data()!['platform'], 'android');
+  });
+
+  test('gives up quietly after the last retry', () async {
+    final service = FcmTokenService(
+      platform: 'web',
+      os: 'windows',
+      delay: (_) async {},
+      firestore: firestore,
+      requestPermission: () async =>
+          buildSettings(AuthorizationStatus.authorized),
+      getToken: () async => throw Exception('offline'),
+      onTokenRefresh: const Stream<String>.empty(),
+    );
+
+    await service.requestPermissionAndSaveToken('user-1');
+
+    final tokens = await firestore.collection('deviceTokens').get();
+    expect(tokens.docs, isEmpty);
+  });
+
+  test('watchMyDevices lists only the signed-in person\'s devices', () async {
+    await firestore.collection('deviceTokens').doc('a').set({
+      'token': 'a',
+      'uid': 'user-1',
+      'platform': 'web',
+      'os': 'windows',
+    });
+    await firestore.collection('deviceTokens').doc('b').set({
+      'token': 'b',
+      'uid': 'user-2',
+      'platform': 'android',
+      'os': 'android',
+    });
+    final service = FcmTokenService(
+      firestore: firestore,
+      platform: 'web',
+      os: 'windows',
+      requestPermission: () async =>
+          buildSettings(AuthorizationStatus.authorized),
+      getToken: () async => null,
+    );
+
+    final devices = await service.watchMyDevices('user-1').first;
+    expect(devices.map((d) => d.token), ['a']);
+  });
 
   group('sendTestNotification', () {
     FcmTokenService buildService({
@@ -254,6 +401,9 @@ void main() {
       void Function()? onCall,
     }) {
       return FcmTokenService(
+        platform: 'web',
+        os: 'windows',
+        delay: (_) async {},
         firestore: firestore,
         requestPermission: () async => buildSettings(status),
         getToken: () async => token,
@@ -270,9 +420,7 @@ void main() {
 
       expect(outcome, TestNotificationOutcome.sent);
       final doc = await firestore
-          .collection('users')
-          .doc('user-1')
-          .collection('fcmTokens')
+          .collection('deviceTokens')
           .doc('token-abc')
           .get();
       expect(doc.exists, isTrue);

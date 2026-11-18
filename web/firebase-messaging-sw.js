@@ -5,8 +5,9 @@
 // key), but no push will ever actually reach the browser outside an open,
 // foregrounded tab, since there is nothing else to receive it.
 //
-// Must live at the web app's root (not under a subfolder) so its default
-// scope covers the whole origin. Registered from web/index.html.
+// Lives at the web app's root and is registered (web/index.html, and by the
+// Firebase Messaging SDK itself) in the "/firebase-cloud-messaging-push-scope"
+// scope — not "/", which belongs to Flutter's own service worker.
 //
 // Uses the Firebase compat SDK (not the modular API) because service
 // workers can't use bundler-style ES module imports here — this is

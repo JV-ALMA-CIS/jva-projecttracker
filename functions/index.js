@@ -3666,6 +3666,7 @@ const {
   notifyAllUsers,
   collectRecipientTokens,
   sendToTokens,
+  DEVICE_TOKENS,
 } = require("./matchScorePushNotification");
 exports.onOpportunityMatchScoreUpdated = onOpportunityMatchScoreUpdated;
 
@@ -3842,4 +3843,58 @@ exports.sendTestNotification = onCall(async (request) => {
   }
   const { successCount, failureCount } = await sendToTokens(recipients, { type: "test" });
   return { tokenCount: recipients.length, successCount, failureCount };
+});
+
+/**
+ * Callable (admins only): notificationReachability — {} -> {people: [...]}
+ * One row per employee sign-in account (from Firebase Auth, so accounts that
+ * never opened the app or have no profile doc still show up), with the
+ * devices registered for alerts. Lets an admin see at a glance who would NOT
+ * get a tender alert. Runs collectRecipientTokens first so old-location
+ * registrations are moved into the registry before counting.
+ */
+exports.notificationReachability = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign-in required");
+  const me = await db.collection("users").doc(request.auth.uid).get();
+  if (me.data()?.role !== "admin") throw new HttpsError("permission-denied", "Admins only");
+
+  await collectRecipientTokens(db);
+  const [devicesSnap, usersSnap] = await Promise.all([
+    db.collection(DEVICE_TOKENS).get(),
+    db.collection("users").get(),
+  ]);
+  const accounts = [];
+  let pageToken;
+  do {
+    const page = await admin.auth().listUsers(1000, pageToken);
+    accounts.push(...page.users);
+    pageToken = page.pageToken;
+  } while (pageToken);
+
+  const iso = (v) => (v?.toDate ? v.toDate().toISOString() : v instanceof Date ? v.toISOString() : null);
+  const devicesByUid = new Map();
+  for (const d of devicesSnap.docs) {
+    const x = d.data();
+    if (!x.uid) continue;
+    if (!devicesByUid.has(x.uid)) devicesByUid.set(x.uid, []);
+    devicesByUid.get(x.uid).push({
+      platform: x.platform || "unknown",
+      os: x.os || "unknown",
+      updatedAt: iso(x.updatedAt),
+      lastSentAt: iso(x.lastSentAt),
+    });
+  }
+  const profileIds = new Set(usersSnap.docs.map((d) => d.id));
+  const people = accounts
+    .filter((a) => !a.disabled)
+    .map((a) => ({
+      uid: a.uid,
+      email: a.email || "",
+      name: a.displayName || "",
+      lastSignInAt: a.metadata?.lastSignInTime ? new Date(a.metadata.lastSignInTime).toISOString() : null,
+      hasProfile: profileIds.has(a.uid),
+      devices: devicesByUid.get(a.uid) || [],
+    }))
+    .sort((x, y) => x.devices.length - y.devices.length || x.email.localeCompare(y.email));
+  return { people };
 });

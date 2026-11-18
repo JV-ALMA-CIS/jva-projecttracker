@@ -46,7 +46,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
           .read(authServiceProvider)
           .signUp(email, _passwordController.text);
       final uid = ref.read(authServiceProvider).currentUser!.uid;
-      await ref.read(userServiceProvider).createOwnProfile(uid, email);
+      await ref.read(userServiceProvider).ensureOwnProfile(uid, email);
       // Sign-up doesn't sign the user in on some flows; land back on Sign
       // In. If Firebase did sign them in, AuthGate's authState listener
       // takes over and shows HomeShell regardless of landing.
