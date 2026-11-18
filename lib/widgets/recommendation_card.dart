@@ -9,7 +9,6 @@ import 'package:jva_projecttracker/models/company_intelligence/knowledge_article
 import 'package:jva_projecttracker/models/company_intelligence/product.dart';
 import 'package:jva_projecttracker/models/company_intelligence/service.dart';
 import 'package:jva_projecttracker/models/company_intelligence/technology.dart';
-import 'package:jva_projecttracker/models/opportunity.dart';
 import 'package:jva_projecttracker/models/recommendation.dart';
 import 'package:jva_projecttracker/services/core/id_names_provider.dart';
 import 'package:jva_projecttracker/services/providers.dart';
@@ -17,6 +16,7 @@ import 'package:jva_projecttracker/utils/humanize_ids.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/priority_style.dart';
 import 'package:jva_projecttracker/widgets/recommended_entity_chips.dart';
+import 'package:jva_projecttracker/widgets/related_opportunities_section.dart';
 
 IconData _categoryIcon(RecommendationCategory category) {
   return switch (category) {
@@ -134,13 +134,7 @@ class RecommendationCard extends ConsumerWidget {
               ),
               if (!compact) ...[
                 const SizedBox(height: AppSpacing.md),
-                RecommendedEntityChips<Opportunity>(
-                  label: strings.relatedOpportunitiesLabel,
-                  ids: recommendation.relatedOpportunityIds,
-                  optionsAsync: ref.watch(opportunitiesStreamProvider),
-                  idOf: (o) => o.id,
-                  nameOf: (o) => o.title,
-                ),
+                RelatedOpportunitiesSection(recommendation: recommendation),
                 RecommendedEntityChips<BusinessUnit>(
                   label: strings.recommendedBusinessUnitsLabel,
                   ids: recommendation.relatedBusinessUnitIds,

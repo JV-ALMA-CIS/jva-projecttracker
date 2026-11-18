@@ -3,6 +3,8 @@ import 'package:jva_projecttracker/models/opportunity.dart';
 import 'package:jva_projecttracker/models/recommendation.dart';
 import 'package:jva_projecttracker/services/recommendation_engine_service.dart';
 import 'package:jva_projecttracker/services/recommendation_service.dart';
+import 'package:jva_projecttracker/services/related_opportunity_triage.dart';
+import 'package:jva_projecttracker/services/opportunities/opportunity_providers.dart';
 
 final recommendationServiceProvider = Provider(
   (ref) => RecommendationService(),
@@ -24,12 +26,11 @@ int _recommendationPriorityRank(OpportunityPriority priority) =>
       OpportunityPriority.low => 0,
     };
 
-/// Active recommendations, derived from [recommendationsStreamProvider] and
-/// sorted by priority (high first) then recency — Firestore can't order by
-/// the priority enum meaningfully, so this mirrors
-/// [projectStatusCountsProvider]'s "derive from the raw stream" idiom rather
-/// than adding a composite index for a sort Firestore can't express anyway.
-final activeRecommendationsProvider = Provider<List<Recommendation>>((ref) {
+/// Every active recommendation, derived from [recommendationsStreamProvider]
+/// and sorted by priority (high first) then recency — including outdated ones
+/// (see [outdatedRecommendationsProvider]). Firestore can't order by the
+/// priority enum meaningfully, so this is derived from the raw stream.
+final allActiveRecommendationsProvider = Provider<List<Recommendation>>((ref) {
   final all = ref.watch(recommendationsStreamProvider).value ?? const [];
   final active = all
       .where((r) => r.status == RecommendationStatus.active)
@@ -42,6 +43,37 @@ final activeRecommendationsProvider = Provider<List<Recommendation>>((ref) {
     return b.generatedAt.compareTo(a.generatedAt);
   });
   return active;
+});
+
+Map<String, Opportunity> _opportunitiesById(Ref ref) => <String, Opportunity>{
+  for (final o
+      in ref.watch(opportunitiesStreamProvider).value ?? const <Opportunity>[])
+    o.id: o,
+};
+
+/// Active recommendations that are about specific opportunities which have
+/// ALL closed or passed their deadline — nothing left to act on. Kept out of
+/// the Dashboard and Notifications, and folded on the Recommendations
+/// screen. Nothing in the database changes, so they reappear if anything is
+/// reopened.
+final outdatedRecommendationsProvider = Provider<List<Recommendation>>((ref) {
+  final byId = _opportunitiesById(ref);
+  final now = DateTime.now();
+  return ref
+      .watch(allActiveRecommendationsProvider)
+      .where((r) => isOutdatedRecommendation(r, byId, now))
+      .toList();
+});
+
+/// Active recommendations that still have something to act on.
+final activeRecommendationsProvider = Provider<List<Recommendation>>((ref) {
+  final outdated = {
+    for (final r in ref.watch(outdatedRecommendationsProvider)) r.id,
+  };
+  return ref
+      .watch(allActiveRecommendationsProvider)
+      .where((r) => !outdated.contains(r.id))
+      .toList();
 });
 
 /// The top 3 active recommendations, for the Dashboard's compact section —

@@ -164,4 +164,114 @@ void main() {
 
     expect(find.text('Consider developing this capability'), findsOneWidget);
   });
+
+  testWidgets(
+    'related opportunities are tappable, triaged, and open a preview with Pursue',
+    (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      final now = DateTime.now();
+      final strong = await firestore.collection('opportunities').add({
+        'title': 'Hospital fit-out Mombasa',
+        'description': '',
+        'sourceUrl': 'https://example.com/a',
+        'status': 'discovered',
+        'fitScorePercent': 84,
+        'fitReasoning': 'Matches our facility-management experience.',
+        'deadline': now.add(const Duration(days: 10)),
+        'discoveredAt': now,
+        'updatedAt': now,
+      });
+      final closed = await firestore.collection('opportunities').add({
+        'title': 'Old roofing tender',
+        'description': '',
+        'sourceUrl': 'https://example.com/b',
+        'status': 'dismissed',
+        'fitScorePercent': 70,
+        'discoveredAt': now,
+        'updatedAt': now,
+      });
+      await firestore.collection('recommendations').add({
+        'category': 'general',
+        'priority': 'high',
+        'title': 'Focus on facility-management work',
+        'reasoning': 'Several strong FM matches.',
+        'status': 'active',
+        'relatedOpportunityIds': [strong.id, closed.id],
+        'generatedAt': now,
+        'createdAt': now,
+        'updatedAt': now,
+      });
+
+      await _pumpScreen(
+        tester,
+        firestore,
+        engineService: RecommendationEngineService(
+          invokeOverride: () async => {'created': 0},
+        ),
+      );
+
+      // The worth-a-look item is shown; the closed one is folded away.
+      expect(find.textContaining('Hospital fit-out Mombasa'), findsOneWidget);
+      expect(find.textContaining('Old roofing tender'), findsNothing);
+      expect(find.text(_strings.showReferenceLabel(1)), findsOneWidget);
+
+      await tester.tap(find.textContaining('Hospital fit-out Mombasa'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Matches our facility-management experience.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text(_strings.pursueButton));
+      await tester.pumpAndSettle();
+      final doc = await firestore
+          .collection('opportunities')
+          .doc(strong.id)
+          .get();
+      expect(doc.data()!['status'], 'reviewing');
+    },
+  );
+
+  testWidgets(
+    'a recommendation whose related opportunities all closed is folded as outdated',
+    (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      final now = DateTime.now();
+      final expired = await firestore.collection('opportunities').add({
+        'title': 'Expired tender',
+        'description': '',
+        'sourceUrl': 'https://example.com/c',
+        'status': 'discovered',
+        'fitScorePercent': 90,
+        'deadline': now.subtract(const Duration(days: 2)),
+        'discoveredAt': now,
+        'updatedAt': now,
+      });
+      await firestore.collection('recommendations').add({
+        'category': 'priorityOpportunity',
+        'priority': 'high',
+        'title': 'Fast-track the expired tender',
+        'reasoning': 'It was a strong fit.',
+        'status': 'active',
+        'relatedOpportunityIds': [expired.id],
+        'generatedAt': now,
+        'createdAt': now,
+        'updatedAt': now,
+      });
+
+      await _pumpScreen(
+        tester,
+        firestore,
+        engineService: RecommendationEngineService(
+          invokeOverride: () async => {'created': 0},
+        ),
+      );
+
+      expect(find.text(_strings.noActiveRecommendations), findsOneWidget);
+      expect(
+        find.text(_strings.outdatedRecommendationsLabel(1)),
+        findsOneWidget,
+      );
+    },
+  );
 }

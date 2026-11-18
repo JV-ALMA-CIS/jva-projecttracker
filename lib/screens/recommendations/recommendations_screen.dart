@@ -94,6 +94,9 @@ class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
     final recommendations = _visibleRecommendations(strings);
+    final outdated = _filter == RecommendationStatus.active
+        ? ref.watch(outdatedRecommendationsProvider)
+        : const <Recommendation>[];
 
     return Scaffold(
       appBar: AppBar(),
@@ -186,6 +189,27 @@ class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
                         ),
                       ),
                     ),
+                if (outdated.isNotEmpty)
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.history_rounded),
+                    title: Text(
+                      strings.outdatedRecommendationsLabel(outdated.length),
+                    ),
+                    children: [
+                      for (final recommendation in outdated)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                          child: Opacity(
+                            opacity: 0.75,
+                            child: RecommendationCard(
+                              recommendation: recommendation,
+                              onDismiss: () => _dismiss(recommendation.id),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
               ],
             ),
           ),

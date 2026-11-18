@@ -1086,6 +1086,25 @@ class AppStrings {
       : 'Recommendation marked as actioned.';
   String get relatedOpportunitiesLabel =>
       _it ? 'Opportunità collegate' : 'Related opportunities';
+  String get worthALookLabel => _it ? 'Da valutare' : 'Worth a look';
+  String showReferenceLabel(int n) =>
+      _it ? 'Mostra $n solo come riferimento' : 'Show $n for reference only';
+  String get hideReferenceLabel =>
+      _it ? 'Nascondi riferimenti' : 'Hide reference items';
+  String get pastDeadlineLabel => _it ? 'Scaduta' : 'Past deadline';
+  String get pursueButton => _it ? 'Persegui' : 'Pursue';
+  String get notForUsButton => _it ? 'Non fa per noi' : 'Not for us';
+  String get openFullDetailsButton =>
+      _it ? 'Apri dettagli completi' : 'Open full details';
+  String get whyItMatchedLabel => _it ? 'Perché corrisponde' : 'Why it matched';
+  String get pursuedMessage => _it
+      ? 'Spostata nella pipeline (In revisione).'
+      : 'Moved into the pipeline (Reviewing).';
+  String get notForUsMessage =>
+      _it ? 'Segnata come non adatta.' : 'Marked as not for us.';
+  String outdatedRecommendationsLabel(int n) => _it
+      ? 'Superate ($n) — tutte le opportunità collegate sono chiuse'
+      : 'Outdated ($n) — every related opportunity has closed';
   String get recommendedIndustriesLabel =>
       _it ? 'Settori consigliati' : 'Recommended industries';
   String get filterActiveLabel => _it ? 'Attive' : 'Active';
