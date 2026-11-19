@@ -64,6 +64,26 @@ int compareGrantsForInbox(Opportunity a, Opportunity b) {
   return b.discoveredAt.compareTo(a.discoveredAt);
 }
 
+/// Why an Inbox item is set aside in the folded section at the bottom
+/// instead of the main list — the main list holds only what JVA can act on.
+enum InboxSetAside { needsPartner, notEligible, weakMatch }
+
+/// Below this match score an item counts as a weak match. Items with no
+/// score yet (0 — e.g. funder-watchlist calls) are never "weak".
+const int kWeakMatchBelow = 50;
+
+InboxSetAside? inboxSetAsideReason(Opportunity o) {
+  if (o.eligibility == GrantEligibility.notEligible) {
+    return InboxSetAside.notEligible;
+  }
+  if (o.eligibility == GrantEligibility.needsPartner) {
+    return InboxSetAside.needsPartner;
+  }
+  final int score = inboxScore(o);
+  if (score > 0 && score < kWeakMatchBelow) return InboxSetAside.weakMatch;
+  return null;
+}
+
 /// How many Inbox items there are of each kind (for the tab labels).
 Map<OpportunityKind, int> inboxKindCounts(List<Opportunity> inbox) {
   final counts = {for (final k in OpportunityKind.values) k: 0};

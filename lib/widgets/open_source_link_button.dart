@@ -33,7 +33,12 @@ class OpenSourceLinkButton extends ConsumerStatefulWidget {
     this.icon,
     this.verified,
     this.onMarkVerified,
+    this.prominent = false,
   });
+
+  /// A filled button (the main "Open the official page" action) instead of
+  /// a text link.
+  final bool prominent;
 
   final String rawUrl;
   final String label;
@@ -109,7 +114,13 @@ class _OpenSourceLinkButtonState extends ConsumerState<OpenSourceLinkButton> {
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
-    final button = widget.icon == null
+    final Widget button = widget.prominent
+        ? FilledButton.icon(
+            onPressed: _open,
+            icon: Icon(widget.icon ?? Icons.open_in_new, size: 18),
+            label: Text(widget.label),
+          )
+        : widget.icon == null
         ? TextButton(onPressed: _open, child: Text(widget.label))
         : TextButton.icon(
             onPressed: _open,

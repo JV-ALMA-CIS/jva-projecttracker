@@ -32,8 +32,10 @@ function matchScoreBucket(score) {
 
 function matchNotifyScoreFor(opportunity) {
   if (CLOSED_STATUSES.has(opportunity.status)) return null;
-  // Grants/calls the company can't apply for (grantEligibility.js) never alert.
-  if (opportunity.eligibility === "notEligible") return null;
+  // Opportunities the company can't apply for alone (grantEligibility.js)
+  // never alert instantly: not eligible, or only with outside partners
+  // (e.g. Horizon consortium calls). They still show in the Monday summary.
+  if (opportunity.eligibility === "notEligible" || opportunity.eligibility === "needsPartner") return null;
   const score =
     typeof opportunity.overallMatchScore === "number"
       ? opportunity.overallMatchScore

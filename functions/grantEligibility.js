@@ -89,7 +89,8 @@ async function fetchCallText(url, fetchImpl = fetchPageImpl) {
 
 function buildEligibilityPrompt({ title, description, client, deadline, pageText: text, hint }, facts, now = new Date()) {
   return `Today is ${now.toISOString().slice(0, 10)}. Decide whether the company below
-can apply to this funding opportunity, the way a careful grants officer would.
+can apply to this opportunity (a grant / call / programme, or a tender), the
+way a careful bid officer would.
 
 COMPANY
 ${facts}
@@ -113,7 +114,13 @@ Rules:
 - "notEligible": a stated rule excludes it (e.g. non-profits/public bodies
   only, for-profits excluded, country not eligible, US tax presence
   required, start-ups under N years only and the company is older,
-  individuals/students only).
+  individuals/students only). For TENDERS also: restricted to NGOs /
+  community-based organisations, to individual consultants, to "national
+  firms" or companies registered in another country where the company has no
+  entity (e.g. a Ugandan or Burundian national firm), or to suppliers already
+  on a closed framework / pre-qualified list. Open supplier registration or
+  prequalification calls ARE eligible. Work that needs solar or energy-
+  generation experience is "notEligible".
 - "unclear": the information available isn't enough to decide.
 Do not guess rules that aren't stated.
 
@@ -121,7 +128,7 @@ Return ONLY a JSON object:
 {
   "eligibility": "eligible" | "needsPartner" | "notEligible" | "unclear",
   "eligibilityNote": string (max 160 chars, plain words, e.g. "For-profit SMEs in Kenya eligible; needs 25% matching funds"),
-  "fundingAmount": string (amount or range with currency as stated, e.g. "US$20,000" or "£100,000–£250,000"; "" if not stated),
+  "fundingAmount": string (grant amount / range, or for a tender the stated contract value or budget, with currency, e.g. "US$20,000" or "£100,000–£250,000"; "" if not stated),
   "matchFunding": string (co-funding / matching requirement, e.g. "25% matching funds"; "" if none stated)
 }
 No commentary, no markdown fences.`;
@@ -139,13 +146,16 @@ function parseEligibility(parsed) {
   };
 }
 
-/** True when [opportunity] is a grant/programme that hasn't been checked yet. */
+/**
+ * True when [opportunity] (grant, programme OR tender) hasn't been checked
+ * yet. Tenders are checked too: some are closed to JVA by their own rules
+ * (NGOs/CBOs only, another country's "national firms" only, individuals).
+ */
 function needsEligibilityCheck(opportunity) {
   return (
     !!opportunity &&
-    GRANT_KINDS.has(opportunity.kind) &&
     !opportunity.eligibilityCheckedAt &&
-    !["archived", "dismissed", "won", "lost"].includes(opportunity.status)
+    !["archived", "dismissed", "won", "lost", "applied"].includes(opportunity.status)
   );
 }
 
@@ -195,7 +205,7 @@ async function assessEligibility(ref, opportunity, { extract, facts, now }) {
  * One failure never stops the batch. Returns {checked, failed, remaining}.
  */
 async function runEligibilityBackfill({ db, extract, limit = 15, now = new Date() }) {
-  const snap = await db.collection("opportunities").where("kind", "in", ["grant", "programme"]).get();
+  const snap = await db.collection("opportunities").where("status", "in", ["discovered", "reviewing"]).get();
   const pending = snap.docs.filter((d) => needsEligibilityCheck(d.data()));
   const facts = await loadCompanyFacts(db);
   let checked = 0;

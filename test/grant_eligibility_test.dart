@@ -118,4 +118,41 @@ void main() {
       ['high', 'low'],
     );
   });
+
+  test(
+    'Inbox sets aside needs-partner, not-eligible and weak matches only',
+    () {
+      expect(
+        inboxSetAsideReason(
+          _grant('a', eligibility: GrantEligibility.needsPartner, score: 90),
+        ),
+        InboxSetAside.needsPartner,
+      );
+      expect(
+        inboxSetAsideReason(
+          _grant('b', eligibility: GrantEligibility.notEligible, score: 90),
+        ),
+        InboxSetAside.notEligible,
+      );
+      expect(
+        inboxSetAsideReason(
+          _grant('c', score: 20, kind: OpportunityKind.tender),
+        ),
+        InboxSetAside.weakMatch,
+      );
+      expect(
+        inboxSetAsideReason(
+          _grant('d', eligibility: GrantEligibility.eligible),
+        ),
+        isNull,
+        reason: 'unscored watchlist calls are not weak',
+      );
+      expect(
+        inboxSetAsideReason(
+          _grant('e', score: 75, kind: OpportunityKind.tender),
+        ),
+        isNull,
+      );
+    },
+  );
 }

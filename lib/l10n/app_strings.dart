@@ -1519,6 +1519,34 @@ class AppStrings {
   };
   String matchFundingLabel(String text) =>
       _it ? 'Cofinanziamento: $text' : 'Co-funding: $text';
+  String get openOfficialPageButton =>
+      _it ? 'Apri la pagina ufficiale' : 'Open the official page';
+  String get openPageShort => _it ? 'Apri pagina' : 'Open page';
+  String get overviewWhatItIs => _it ? 'Di cosa si tratta' : 'What it is';
+  String get overviewWhyItFits =>
+      _it ? 'Perché ci riguarda' : 'Why it fits JVA';
+  String get overviewCanWeApply =>
+      _it ? 'Possiamo candidarci?' : 'Can we apply?';
+  String get overviewSimilarProjects =>
+      _it ? 'Progetti simili già realizzati' : 'Similar past projects';
+  String get overviewHowToApply => _it ? 'Come candidarsi' : 'How to apply';
+  String get overviewHowToApplyHint => _it
+      ? 'Requisiti, documenti e modalità di invio sono sulla pagina ufficiale.'
+      : 'Requirements, documents and how to submit are on the official page.';
+  String get overviewNoDetailsYet => _it
+      ? 'Nessuna descrizione salvata: apri la pagina ufficiale per i dettagli.'
+      : 'No description saved — open the official page for the full details.';
+  String inboxFoldedLabel(int needPartner, int notEligible, int weak) {
+    final List<String> parts = [
+      if (needPartner > 0)
+        _it ? '$needPartner servono partner' : '$needPartner need partners',
+      if (notEligible > 0)
+        _it ? '$notEligible non ammissibili' : '$notEligible not eligible',
+      if (weak > 0) _it ? '$weak corrispondenze deboli' : '$weak weak matches',
+    ];
+    return (_it ? 'Nascosti: ' : 'Set aside: ') + parts.join(' · ');
+  }
+
   String get myDevicesTitle => _it
       ? 'I tuoi dispositivi che ricevono avvisi'
       : 'Your devices getting alerts';

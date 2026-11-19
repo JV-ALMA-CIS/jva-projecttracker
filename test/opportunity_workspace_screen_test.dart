@@ -102,6 +102,12 @@ void main() {
 
       await _pumpScreen(tester, firestore, id);
 
+      // The AI overview above it is tall; scroll down like a person would.
+      await tester.scrollUntilVisible(
+        find.text(_strings.runStrategicReviewButton),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text(_strings.runAiClassificationButton), findsOneWidget);
       expect(find.text(_strings.runMatchAnalysisButton), findsOneWidget);
       expect(find.text(_strings.runStrategicReviewButton), findsOneWidget);
@@ -109,18 +115,33 @@ void main() {
   );
 
   testWidgets(
-    'AI overview falls back to the discovery-time fit reasoning before any AI pass has run',
+    'AI overview shows why it fits from the discovery-time reasoning before any AI pass has run',
     (tester) async {
       final firestore = FakeFirebaseFirestore();
       final id = await _seedFreshOpportunity(firestore);
 
       await _pumpScreen(tester, firestore, id);
 
-      expect(find.text(_strings.fitReasoningLabel), findsOneWidget);
+      expect(find.text(_strings.overviewWhyItFits), findsOneWidget);
       expect(
         find.text('Strong alignment with our water infrastructure work.'),
         findsOneWidget,
       );
+    },
+  );
+
+  testWidgets(
+    'AI overview always shows what it is, how to apply and the official page button',
+    (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      final id = await _seedFreshOpportunity(firestore);
+
+      await _pumpScreen(tester, firestore, id);
+
+      expect(find.text(_strings.overviewWhatItIs), findsOneWidget);
+      expect(find.text(_strings.overviewHowToApply), findsOneWidget);
+      // One in the header, one in the overview's "How to apply".
+      expect(find.text(_strings.openOfficialPageButton), findsNWidgets(2));
     },
   );
 

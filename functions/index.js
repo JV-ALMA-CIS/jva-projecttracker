@@ -1803,7 +1803,7 @@ async function archiveOutOfScopeOpportunities() {
  * background slot then re-applies the scope rules to existing opportunities
  * once (tracked on companySettings/scopePolicy), with no manual step.
  */
-const SCOPE_POLICY_VERSION = 1;
+const SCOPE_POLICY_VERSION = 2; // 2: renewable energy / energy generation added
 
 async function applyScopePolicyIfChanged() {
   const ref = db.collection("companySettings").doc("scopePolicy");

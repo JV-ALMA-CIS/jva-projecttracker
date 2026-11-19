@@ -88,7 +88,7 @@ const pageFetch = (html) => async () => ({ ok: true, status: 200, text: async ()
       PAGE,
       {
         calls: [
-          { name: "Energy Transition Challenge Fund", deadline: "2027-01-15", rolling: false, applyUrl: "https://www.aecfafrica.org/etcf", summary: "s" },
+          { name: "Agribusiness Growth Challenge Fund", deadline: "2027-01-15", rolling: false, applyUrl: "https://www.aecfafrica.org/etcf", summary: "s" },
           { name: "Rolling window", deadline: null, rolling: true, applyUrl: "", summary: "" },
           { name: "Closed round", deadline: "2026-10-01" },
           { name: "No date, not rolling", deadline: null, rolling: false },
@@ -99,9 +99,9 @@ const pageFetch = (html) => async () => ({ ok: true, status: 200, text: async ()
     );
     assert.deepEqual(
       calls.map((c) => c.name),
-      ["Energy Transition Challenge Fund", "Rolling window"],
+      ["Agribusiness Growth Challenge Fund", "Rolling window"],
     );
-    assert.equal(calls[0].externalId, "funder:aecf:energy-transition-challenge-fund:2027");
+    assert.equal(calls[0].externalId, "funder:aecf:agribusiness-growth-challenge-fund:2027");
     assert.equal(calls[1].externalId, "funder:aecf:rolling-window:rolling");
     assert.equal(calls[1].applyUrl, PAGE.url, "falls back to the funder page");
   });
@@ -117,8 +117,8 @@ const pageFetch = (html) => async () => ({ ok: true, status: 200, text: async ()
   });
 
   await test("isSameCall ignores the funder's name; a funder's single main call matches anything at its link", () => {
-    assert.equal(isSameCall("AECF — Energy Transition Challenge Fund", "Women in Agribusiness window", PAGE), false);
-    assert.equal(isSameCall("AECF Energy Transition Challenge Fund", "Energy Transition Challenge Fund", PAGE), true);
+    assert.equal(isSameCall("AECF — Agribusiness Growth Challenge Fund", "Women in Agribusiness window", PAGE), false);
+    assert.equal(isSameCall("AECF Agribusiness Growth Challenge Fund", "Agribusiness Growth Challenge Fund", PAGE), true);
     const fid = { name: "Fund for Innovation in Development (FID)" };
     assert.equal(isSameCall("Fund for Innovation in Development (FID) - Open Call for Innovative Projects", "Open call for innovative projects", fid), true);
     assert.equal(isSameCall("FID - Open Call for Innovative Projects", "Fund for Innovation in Development", fid), true);
@@ -126,7 +126,7 @@ const pageFetch = (html) => async () => ({ ok: true, status: 200, text: async ()
 
   const extraction = {
     calls: [
-      { name: "Energy Transition Challenge Fund", deadline: "2027-01-15", rolling: false, applyUrl: "", summary: "For SMEs in Kenya." },
+      { name: "Agribusiness Growth Challenge Fund", deadline: "2027-01-15", rolling: false, applyUrl: "", summary: "For SMEs in Kenya." },
       { name: "Women in Agribusiness window", deadline: "2027-02-01", rolling: false, applyUrl: "", summary: "Non-profits only." },
     ],
   };
@@ -160,7 +160,7 @@ const pageFetch = (html) => async () => ({ ok: true, status: 200, text: async ()
     const r = await checkFunderPage(PAGE, {
       db,
       extract,
-      fetchImpl: pageFetch("<main>Energy Transition Challenge Fund ... Women in Agribusiness</main>"),
+      fetchImpl: pageFetch("<main>Agribusiness Growth Challenge Fund ... Women in Agribusiness</main>"),
       notify: async (p) => pushes.push(p),
       now: NOW,
       facts: DEFAULT_COMPANY_FACTS,
@@ -196,7 +196,7 @@ const pageFetch = (html) => async () => ({ ok: true, status: 200, text: async ()
 
   await test("a call already found by AI search (same link, similar title) is not added again", async () => {
     const db = fakeDb([
-      { id: "x", title: "AECF Energy Transition Challenge Fund", sourceUrl: PAGE.url, kind: "grant" },
+      { id: "x", title: "AECF Agribusiness Growth Challenge Fund", sourceUrl: PAGE.url, kind: "grant" },
     ]);
     const r = await checkFunderPage(PAGE, {
       db,
@@ -216,6 +216,12 @@ const pageFetch = (html) => async () => ({ ok: true, status: 200, text: async ()
     assert.equal(outOfScopeReason({ title: "Photovoltaic mini-grids for health centres" }), "solar");
     assert.equal(outOfScopeReason({ title: "Construction of a school block", description: "with solar lighting" }), null);
     assert.equal(outOfScopeReason({ title: "Supply of GPS devices" }), null);
+    assert.equal(outOfScopeReason({ title: "Renewable Energy Valleys in Africa to increase energy security" }), "energy");
+    assert.equal(outOfScopeReason({ title: "Innovative microgrids for improved energy system integration" }), "energy");
+    assert.equal(outOfScopeReason({ title: "Energy Transition Challenge Fund" }), "energy");
+    assert.equal(outOfScopeReason({ title: "Geothermal well-pad civil works" }), "energy");
+    assert.equal(outOfScopeReason({ title: "Renovation of the EU Delegation offices" }), null);
+    assert.equal(outOfScopeReason({ title: "HVAC maintenance services at EACOP sites" }), null);
   });
 
   await test("a solar call on a funder page is neither saved nor alerted", async () => {
@@ -249,10 +255,11 @@ const pageFetch = (html) => async () => ({ ok: true, status: 200, text: async ()
     assert.equal(parseEligibility(null).eligibility, "unclear");
   });
 
-  await test("only unchecked, live grants/programmes need a check", () => {
+  await test("only unchecked, live opportunities (tenders too) need a check", () => {
     assert.equal(needsEligibilityCheck({ kind: "grant", status: "discovered" }), true);
     assert.equal(needsEligibilityCheck({ kind: "programme", status: "reviewing" }), true);
-    assert.equal(needsEligibilityCheck({ kind: "tender", status: "discovered" }), false);
+    assert.equal(needsEligibilityCheck({ kind: "tender", status: "discovered" }), true);
+    assert.equal(needsEligibilityCheck({ kind: "tender", status: "applied" }), false);
     assert.equal(needsEligibilityCheck({ kind: "grant", status: "archived" }), false);
     assert.equal(needsEligibilityCheck({ kind: "grant", status: "discovered", eligibilityCheckedAt: new Date() }), false);
   });
@@ -276,6 +283,8 @@ const pageFetch = (html) => async () => ({ ok: true, status: 200, text: async ()
     assert.equal(reminderDue(grant, NOW), null);
     assert.ok(reminderDue({ ...grant, status: "reviewing" }, NOW), "unless the team is reviewing it");
     assert.equal(matchNotifyScoreFor({ ...grant, eligibility: "eligible" }), 90);
+    assert.equal(matchNotifyScoreFor({ ...grant, eligibility: "needsPartner" }), null, "consortium-only: no instant alert");
+    assert.equal(reminderDue({ ...grant, eligibility: "needsPartner" }, NOW), null);
   });
 
   console.log(`\n${passed} test(s) passed`);

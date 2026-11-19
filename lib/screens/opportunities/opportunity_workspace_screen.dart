@@ -31,6 +31,8 @@ import 'package:jva_projecttracker/services/strategic_review_service.dart';
 import 'package:jva_projecttracker/theme/app_page_route.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/grant_eligibility_chips.dart';
+import 'package:jva_projecttracker/widgets/open_source_link_button.dart';
+import 'package:jva_projecttracker/services/core/id_names_provider.dart';
 import 'package:jva_projecttracker/widgets/share_with_team_dialog.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/fit_score_badge.dart';
@@ -391,9 +393,19 @@ class _OpportunityWorkspaceScreenState
                   ),
                 ),
               ],
-              if (o.kind != OpportunityKind.tender) ...[
+              const SizedBox(height: AppSpacing.md),
+              GrantEligibilitySummary(opportunity: o),
+              if (o.sourceUrl.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.md),
-                GrantEligibilitySummary(opportunity: o),
+                OpenSourceLinkButton(
+                  rawUrl: o.sourceUrl,
+                  label: strings.openOfficialPageButton,
+                  prominent: true,
+                  verified: o.sourceUrlVerified,
+                  onMarkVerified: () => ref
+                      .read(opportunityServiceProvider)
+                      .markSourceUrlVerified(o.id),
+                ),
               ],
               if (o.assignedTo?.isNotEmpty ?? false) ...[
                 const SizedBox(height: AppSpacing.xs),
@@ -409,30 +421,57 @@ class _OpportunityWorkspaceScreenState
     );
   }
 
+  /// The AI overview a person reads before deciding to apply: what it is
+  /// (the source's own description), why it fits JVA (the latest AI
+  /// reasoning, plus similar past projects), whether JVA can apply (the
+  /// eligibility check), and how to apply (deadline + official page). Every
+  /// part that has data is shown — never just a headline.
   Widget _buildAiOverview(
     BuildContext context,
     AppStrings strings,
     Opportunity o,
   ) {
     final theme = Theme.of(context);
-    String headline;
-    String? body;
-    if (o.strategicReviewedAt != null) {
-      headline = o.executiveRecommendation != null
-          ? strings.strategicReviewRecommendationLabel(
-              o.executiveRecommendation!,
-            )
-          : strings.aiOverviewSectionTitle;
-      body = o.executiveSummary;
-    } else if (o.matchAnalyzedAt != null) {
-      headline = o.overallMatchScore != null
-          ? '${o.overallMatchScore}% ${strings.overallMatchScoreLabel}'
-          : strings.aiOverviewSectionTitle;
-      body = o.strategicRecommendation;
-    } else {
-      headline = strings.fitReasoningLabel;
-      body = o.fitReasoning.isNotEmpty ? o.fitReasoning : null;
-    }
+    final Map<String, String> names = ref.watch(idNamesProvider);
+
+    final String headline =
+        o.strategicReviewedAt != null && o.executiveRecommendation != null
+        ? strings.strategicReviewRecommendationLabel(o.executiveRecommendation!)
+        : '${o.overallMatchScore ?? o.fitScorePercent}% ${strings.overallMatchScoreLabel}';
+
+    final String description = o.description.trim();
+    final List<String> why = [
+      for (final String? t in [
+        o.executiveSummary,
+        o.strategicRecommendation,
+        o.fitReasoning,
+        o.classificationSummary,
+      ])
+        if (t != null && t.trim().isNotEmpty) t.trim(),
+    ];
+    // Distinct texts only, at most two (the newest analysis first).
+    final List<String> whyShown = why.toSet().take(2).toList();
+    final List<String> similar = {
+      ...o.recommendedExperienceIds,
+      ...o.experienceIds,
+    }.map((id) => names[id]).whereType<String>().toList();
+
+    Widget section(String label, Widget child) => Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          child,
+        ],
+      ),
+    );
 
     return HoverLift(
       child: Card(
@@ -448,25 +487,93 @@ class _OpportunityWorkspaceScreenState
                     color: AppStatusColors.ai,
                   ),
                   const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      strings.aiOverviewSectionTitle,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                   Text(
-                    strings.aiOverviewSectionTitle,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    headline,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                headline,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+              section(
+                strings.overviewWhatItIs,
+                Text(
+                  description.isNotEmpty
+                      ? description
+                      : strings.overviewNoDetailsYet,
                 ),
               ),
-              if (body != null && body.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text(body),
-              ],
+              if (whyShown.isNotEmpty)
+                section(
+                  strings.overviewWhyItFits,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final String t in whyShown)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                          child: Text(t),
+                        ),
+                    ],
+                  ),
+                ),
+              if (similar.isNotEmpty)
+                section(
+                  strings.overviewSimilarProjects,
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.xs,
+                    children: [
+                      for (final String name in similar)
+                        Chip(
+                          avatar: const Icon(Icons.history_edu, size: 16),
+                          label: Text(name),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
+                  ),
+                ),
+              if (o.eligibility != null || o.fundingAmount != null)
+                section(
+                  strings.overviewCanWeApply,
+                  GrantEligibilitySummary(opportunity: o),
+                ),
+              section(
+                strings.overviewHowToApply,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (o.deadline != null)
+                      Text(_deadlineText(strings, o.deadline!)),
+                    Text(
+                      strings.overviewHowToApplyHint,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (o.sourceUrl.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      OpenSourceLinkButton(
+                        rawUrl: o.sourceUrl,
+                        label: strings.openOfficialPageButton,
+                        prominent: true,
+                        verified: o.sourceUrlVerified,
+                        onMarkVerified: () => ref
+                            .read(opportunityServiceProvider)
+                            .markSourceUrlVerified(o.id),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
               if (o.confidenceScore != null) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Chip(

@@ -13,6 +13,7 @@ import 'package:jva_projecttracker/widgets/fade_slide_in.dart';
 import 'package:jva_projecttracker/widgets/fit_score_badge.dart';
 import 'package:jva_projecttracker/widgets/grant_eligibility_chips.dart';
 import 'package:jva_projecttracker/widgets/hover_lift.dart';
+import 'package:jva_projecttracker/widgets/open_source_link_button.dart';
 import 'package:jva_projecttracker/widgets/share_with_team_dialog.dart';
 
 /// The Opportunity Inbox — a triage-focused view of opportunities still
@@ -79,6 +80,18 @@ class OpportunityInboxBody extends ConsumerWidget {
         ? const OpportunityBuFilter.all()
         : OpportunityBuFilter.specific(selectedBu.id, selectedBu.name);
     final visible = inboxSlice(inbox, kind: view.kind, businessUnit: buFilter);
+    // Main list: what JVA can act on. Needs-partner, not-eligible and weak
+    // matches go to one folded section at the bottom — kept, not lost.
+    final List<Opportunity> actionable = [
+      for (final o in visible)
+        if (inboxSetAsideReason(o) == null) o,
+    ];
+    final List<Opportunity> setAside = [
+      for (final o in visible)
+        if (inboxSetAsideReason(o) != null) o,
+    ];
+    int countAside(InboxSetAside r) =>
+        setAside.where((o) => inboxSetAsideReason(o) == r).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -149,9 +162,36 @@ class OpportunityInboxBody extends ConsumerWidget {
                   compact: true,
                 )
               : ListView.builder(
-                  itemCount: visible.length,
+                  itemCount: actionable.length + (setAside.isEmpty ? 0 : 1),
                   itemBuilder: (context, i) {
-                    final opportunity = visible[i];
+                    if (i == actionable.length) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                        child: Card(
+                          child: ExpansionTile(
+                            leading: const Icon(Icons.inventory_2_outlined),
+                            title: Text(
+                              strings.inboxFoldedLabel(
+                                countAside(InboxSetAside.needsPartner),
+                                countAside(InboxSetAside.notEligible),
+                                countAside(InboxSetAside.weakMatch),
+                              ),
+                            ),
+                            children: [
+                              for (final o in setAside)
+                                _InboxTile(
+                                  opportunity: o,
+                                  duplicateOf: duplicates[o.id],
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    final opportunity = actionable[i];
                     return FadeSlideIn(
                       index: i,
                       child: _InboxTile(
@@ -262,10 +302,8 @@ class _InboxTile extends ConsumerWidget {
                       },
                     ),
                   ],
-                  if (opportunity.kind != OpportunityKind.tender) ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    GrantEligibilitySummary(opportunity: opportunity),
-                  ],
+                  const SizedBox(height: AppSpacing.sm),
+                  GrantEligibilitySummary(opportunity: opportunity),
                   if (duplicateOf != null) ...[
                     const SizedBox(height: AppSpacing.sm),
                     Container(
@@ -331,6 +369,13 @@ class _InboxTile extends ConsumerWidget {
                         icon: const Icon(Icons.archive_outlined, size: 18),
                         label: Text(strings.archiveButton),
                       ),
+                      if (opportunity.sourceUrl.isNotEmpty)
+                        OpenSourceLinkButton(
+                          rawUrl: opportunity.sourceUrl,
+                          label: strings.openPageShort,
+                          icon: Icons.open_in_new,
+                          verified: opportunity.sourceUrlVerified,
+                        ),
                       TextButton.icon(
                         onPressed: () =>
                             showShareWithTeamDialog(context, opportunity),
