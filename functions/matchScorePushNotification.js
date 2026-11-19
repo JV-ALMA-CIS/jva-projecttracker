@@ -526,6 +526,9 @@ exports.onOpportunityMatchScoreUpdated = onDocumentUpdated(
     // Added by hand: the person who added it already shared it with the
     // team (shareOpportunityWithTeam), so its first score isn't news.
     if (isFirstAnalysis && after.addedByUid) return;
+    // Saved on a watcher's first look at a page (tenderPageWatchlist.js):
+    // scored for ranking, but the backlog doesn't alert one by one.
+    if (isFirstAnalysis && after.scoreQuietly) return;
     await notifyAllUsers({
       type: isFirstAnalysis ? "newOpportunity" : "matchScore",
       opportunityId,

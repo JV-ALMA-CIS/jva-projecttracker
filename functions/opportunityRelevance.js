@@ -156,6 +156,15 @@ const GRANT_OPEN_ELIGIBILITY_KEYWORDS = [
   "developing countr",
   "global south",
   "sub-saharan",
+  // EU / Italian-registered applicants — JVA's parent company is in Italy.
+  "eu member state",
+  "member states",
+  "eu-registered",
+  "established in the eu",
+  "european companies",
+  "italy",
+  "italian",
+  "horizon europe",
 ];
 
 /**

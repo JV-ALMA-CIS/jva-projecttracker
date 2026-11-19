@@ -148,7 +148,12 @@ matches what the company actually does. Be strict: generic supply of goods
 the company doesn't deal in (fuel, food, drugs, stationery, vehicles) should
 score low; construction works, facility management (cleaning, security,
 maintenance), ICT systems and agribusiness work it can deliver should score
-higher. Give a one-sentence reason.
+higher.
+Score noticeably higher (and say so in the reason) when a tender closely resembles
+one of the company's past projects listed in the profile above (e.g. embassy or
+diplomatic-residence renovation, roofing, building works for foreign missions, an
+AICS-type agribusiness programme) — proven track record wins bids.
+Give a one-sentence reason.
 
 Tenders:
 ${lines}

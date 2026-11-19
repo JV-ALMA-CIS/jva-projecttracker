@@ -148,14 +148,23 @@ with 5-8 entries (area names 2-6 words each). No commentary, no markdown fences.
  */
 /** Prompt opening for tender discovery (procurement the company bids on). */
 function buildTenderPromptHeader(profile, query) {
-  return `You are a business development assistant for a software company with this profile:
+  return `You are a business development assistant for JV ALMA CIS, a Kenyan company
+(with an Italian parent company) whose business units are Construction,
+Facility Management, Embassy & Diplomatic Facilities, Agribusiness,
+Information Technology, Oil & Gas Inspection Services and Human Resources,
+and which builds its own software platforms. It has NO experience in solar /
+photovoltaic / energy generation — never include those. Company profile:
 
 ${profile}
 
-Using web search, find up to 8 currently open opportunities, tenders, RFPs, or client
-opportunities${query ? ` related to: ${query}` : " that this company is realistically qualified to bid on"}.
+Using web search, find up to 8 currently open tenders, RFQs, RFPs or expressions
+of interest${query ? ` for: ${query}` : " that this company is realistically qualified to bid on"}.
 For each one, estimate a fit score (0-100) for how well this company's stack and
 experience match the opportunity, and briefly justify the score.
+Score noticeably higher (and say so in the reason) when a tender closely resembles
+one of the company's past projects listed in the profile above (e.g. embassy or
+diplomatic-residence renovation, roofing, building works for foreign missions, an
+AICS-type agribusiness programme) — proven track record wins bids.
 
 GEOGRAPHY — only include opportunities located in Kenya, Uganda, Tanzania,
 Rwanda, or Burundi. Do not include opportunities from any other country
@@ -179,7 +188,7 @@ UN agencies, NGOs and private companies.
  */
 function buildGrantPromptHeader(profile, focus) {
   return `You are a funding and partnerships assistant for JV ALMA CIS, a company
-registered and headquartered in Kenya that builds its own software platforms
+registered and headquartered in Kenya (parent company in Italy) that builds its own software platforms
 and delivers construction, agribusiness, facility-management and IT projects.
 Company profile:
 
@@ -195,14 +204,17 @@ Lab (ABIL) EXPLORE" open call, EU Funding & Tenders portal calls for
 proposals, Horizon Europe / EIC, Global Gateway, African Development Bank,
 African Union, and foundation or donor innovation funds.
 
-ELIGIBILITY — only include calls a Kenyan-registered company (start-up/SME)
-can apply to as lead: calls targeted at Kenya or East Africa, at African
-applicants, or open internationally / to third countries. Exclude calls
-restricted to EU-member-state entities, to individuals (scholarships,
-fellowships, student prizes), or to NGOs only. Set "kenyaEligible" to true
-only when the call text confirms a Kenyan entity can apply, and summarise
-that rule in "eligibility" (e.g. "Kenyan start-ups and SMEs"). Exclude calls
-whose deadline has passed.
+ELIGIBILITY — the company is Kenyan-registered AND has a parent company
+registered in Italy (EU), so include calls it can apply to as lead either
+way: calls targeted at Kenya or East Africa, at African applicants, open
+internationally / to third countries, OR open to EU / Italian-registered
+companies (applying through the Italian parent). Exclude calls restricted to
+individuals (scholarships, fellowships, student prizes), to NGOs /
+universities / public bodies only, and solar / energy-generation calls (no
+experience there). Set "kenyaEligible" to true only when the call text
+confirms the Kenyan company or the Italian parent can apply, and summarise
+that rule in "eligibility" (e.g. "Kenyan SMEs" or "EU-registered SMEs — via
+Italian parent"). Exclude calls whose deadline has passed.
 
 For each call, estimate a fit score (0-100) for how well the company's
 platforms and experience match it, and briefly justify the score. Set
@@ -492,11 +504,41 @@ exports.scheduledGrantDiscovery = onSchedule(
   },
 );
 
-/** Scheduled: runs the same discovery routine automatically every Monday. */
+/**
+ * Tender themes, one AI web search per business unit (each search returns
+ * at most 8, so splitting by unit finds far more than one broad search).
+ * Aimed at buyers the company can win: embassies, donors, UN agencies, NGOs
+ * and private companies in Kenya / East Africa. Edit to change what the
+ * platform looks for.
+ */
+const TENDER_FOCUS_AREAS = [
+  "building construction, renovation, fit-out and civil works for embassies, UN agencies, NGOs, donor-funded projects and private developers in Kenya and East Africa",
+  "facility management, cleaning, security, building maintenance, landscaping and property services contracts for UN agencies, embassies, NGOs and private companies in Kenya",
+  "works, maintenance and services for embassies, high commissions and diplomatic compounds in Kenya and East Africa (RFQs, renovations, maintenance contracts)",
+  "agribusiness, agricultural value chains, agro-processing, farmer advisory, irrigation and digital agriculture tenders and consultancies (FAO, IFAD, WFP, GIZ, SNV, NGOs, donor projects) in Kenya and East Africa",
+  "oil & gas inspection, testing, NDT, calibration, maintenance and technical services for petroleum depots, pipelines, retail fuel stations and upstream projects (EACOP, Tilenga, Kingfisher, TotalEnergies, Vivo Energy, Rubis, Ola Energy) in Kenya, Uganda and Tanzania",
+  "ICT, software development, digital platforms, GIS / mapping and data systems tenders and consultancies by donors, UN agencies, NGOs and private companies in Kenya and East Africa",
+  "human resources consultancy, recruitment, payroll and staffing services tenders by NGOs, UN agencies and private companies in Kenya",
+];
+
+/** Runs one AI tender search per TENDER_FOCUS_AREAS theme, in parallel. Returns the total created. */
+async function runTenderDiscoveryByUnit() {
+  const results = await Promise.allSettled(
+    TENDER_FOCUS_AREAS.map((focus) => runOpportunityDiscovery(focus, { mode: "tender", focus })),
+  );
+  let created = 0;
+  for (const r of results) {
+    if (r.status === "fulfilled") created += r.value;
+    else logger.error("runTenderDiscoveryByUnit: one theme failed", r.reason);
+  }
+  return created;
+}
+
+/** Scheduled: per-unit tender searches twice a week — Monday and Thursday 08:00 Nairobi. */
 exports.scheduledOpportunityDiscovery = onSchedule(
-  { schedule: "every monday 08:00", timeZone: "Africa/Nairobi", timeoutSeconds: 240 },
+  { schedule: "0 8 * * 1,4", timeZone: "Africa/Nairobi", timeoutSeconds: 540 },
   async () => {
-    await runOpportunityDiscovery();
+    await runTenderDiscoveryByUnit();
   },
 );
 
@@ -3816,6 +3858,68 @@ exports.scheduledPpipDiscovery = onSchedule(
     await runPpip();
   },
 );
+
+// World Bank procurement notices (Kenya + East Africa) — official free API. See connectors/worldBankConnector.js.
+const { runWorldBankDiscovery } = require("./connectors/worldBankConnector");
+const runWorldBank = ({ quiet } = {}) =>
+  runWorldBankDiscovery({
+    db,
+    admin,
+    buildProfile: buildCompanyProfile,
+    scoreBatch: (prompt) => retryAsync(() => callGeminiForJson(prompt), { label: "worldBankScoring" }),
+    logger,
+    quiet,
+  });
+
+/** Every morning at 06:50 Nairobi, right after the PPIP run (so archived PPIP twins get restored). */
+exports.scheduledWorldBankDiscovery = onSchedule(
+  { schedule: "every day 06:50", timeZone: "Africa/Nairobi", timeoutSeconds: 540 },
+  async () => {
+    await runWorldBank();
+  },
+);
+
+/** Callable (signed-in): runWorldBankImport — { quiet?: boolean } -> counts. */
+exports.runWorldBankImport = onCall({ timeoutSeconds: 540 }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign-in required");
+  return runWorldBank({ quiet: typeof request.data?.quiet === "boolean" ? request.data.quiet : undefined });
+});
+
+// UNDP procurement notices (East African country offices) — see connectors/undpConnector.js.
+const { runUndpDiscovery } = require("./connectors/undpConnector");
+const runUndp = ({ quiet } = {}) =>
+  runUndpDiscovery({
+    db,
+    admin,
+    buildProfile: buildCompanyProfile,
+    scoreBatch: (prompt) => retryAsync(() => callGeminiForJson(prompt), { label: "undpScoring" }),
+    logger,
+    quiet,
+  });
+
+/** Every morning at 06:55 Nairobi. */
+exports.scheduledUndpDiscovery = onSchedule(
+  { schedule: "every day 06:55", timeZone: "Africa/Nairobi", timeoutSeconds: 300 },
+  async () => {
+    await runUndp();
+  },
+);
+
+/** Callable (signed-in): runUndpImport — { quiet?: boolean } -> counts. */
+exports.runUndpImport = onCall({ timeoutSeconds: 300 }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign-in required");
+  return runUndp({ quiet: typeof request.data?.quiet === "boolean" ? request.data.quiet : undefined });
+});
+
+// Tender page watchlist (Italian Embassy, EU Delegation Kenya, Kenya Red Cross) — see tenderPageWatchlist.js.
+const { makeScheduledTenderPageWatch, checkAllTenderPages } = require("./tenderPageWatchlist");
+exports.scheduledTenderPageWatch = makeScheduledTenderPageWatch(extractWatchedPage);
+
+/** Callable (signed-in): checkTenderPagesNow -> { [pageKey]: {status, created} }. */
+exports.checkTenderPagesNow = onCall({ timeoutSeconds: 540 }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign-in required");
+  return checkAllTenderPages({ db, extract: extractWatchedPage });
+});
 
 /** Callable: runPpipImport — { quiet?: boolean } -> counts. `quiet` for the first bulk import. */
 exports.runPpipImport = onCall({ timeoutSeconds: 540 }, async (request) => {

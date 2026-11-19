@@ -87,7 +87,7 @@ async function fetchCallText(url, fetchImpl = fetchPageImpl) {
   }
 }
 
-function buildEligibilityPrompt({ title, description, client, deadline, pageText: text }, facts, now = new Date()) {
+function buildEligibilityPrompt({ title, description, client, deadline, pageText: text, hint }, facts, now = new Date()) {
   return `Today is ${now.toISOString().slice(0, 10)}. Decide whether the company below
 can apply to this funding opportunity, the way a careful grants officer would.
 
@@ -99,7 +99,8 @@ Title: ${title || "(untitled)"}
 Funder / organiser: ${client || "(unknown)"}
 Deadline: ${deadline || "(not stated / rolling)"}
 Description: ${description || "(none)"}
-${text ? `\nText of the call's web page:\n"""\n${text}\n"""` : ""}
+${hint ? `Eligibility as noted when the call was found: ${hint}
+` : ""}${text ? `\nText of the call's web page:\n"""\n${text}\n"""` : ""}
 
 Rules:
 - "eligible": the company can apply on its own — either the Kenyan company,
@@ -167,6 +168,11 @@ async function computeEligibility(opportunity, { extract, facts, text, fetchImpl
       client: opportunity.client || opportunity.procuringOrganization,
       deadline: toIso(opportunity.deadline),
       pageText: callText,
+      // Free-text eligibility some sources (EU portal, AI search) stored in
+      // this same field before it held the verdict — useful evidence.
+      hint: typeof opportunity.eligibility === "string" && !ELIGIBILITY_VALUES.has(opportunity.eligibility)
+        ? opportunity.eligibility.slice(0, 400)
+        : "",
     },
     facts,
     now,
