@@ -193,23 +193,106 @@ function buildNotificationMessage(
     data.opportunityId = String(opportunityId);
     link = `${WEB_APP_URL}?opportunityId=${encodeURIComponent(String(opportunityId))}`;
   }
+  const tag = tagFor(type, opportunityId);
+  const sticky = STICKY_TYPES.has(type);
+  const channelId = channelForType(type);
+  const ttlSeconds = ttlSecondsFor(type);
+  // Repeated in data so the app can show the same system notification
+  // itself when the push arrives while it's open (PushNotificationService).
+  Object.assign(data, { title, body, tag, sticky: sticky ? "1" : "0", channel: channelId, link });
   return {
     token,
     notification: { title, body },
     data,
     android: {
       priority: "high",
-      notification: { channelId: "general", defaultSound: true },
+      ttl: ttlSeconds * 1000,
+      collapseKey: tag,
+      notification: {
+        channelId,
+        defaultSound: true,
+        tag,
+        icon: "ic_stat_jva",
+        color: NOTIFICATION_COLOR,
+      },
     },
     apns: {
+      headers: { "apns-collapse-id": tag.slice(0, 64) },
       payload: { aps: { sound: "default" } },
     },
     webpush: {
-      headers: { Urgency: "high" },
-      notification: { icon: "/icons/Icon-192.png" },
+      headers: { Urgency: "high", TTL: String(ttlSeconds) },
+      notification: {
+        icon: "/icons/Icon-192.png",
+        badge: "/icons/Icon-192.png",
+        tag,
+        renotify: true,
+        requireInteraction: sticky,
+      },
       fcmOptions: { link },
     },
   };
+}
+
+/** App navy (AppTheme.seedColor); tints the Android status-bar icon. */
+const NOTIFICATION_COLOR = "#1A2B4C";
+
+/**
+ * Alerts about something we can still apply for stay on screen until the
+ * person clicks or dismisses them (like an Outlook reminder) — on desktop
+ * browsers via `requireInteraction`. Test and summary pushes fade normally.
+ */
+const STICKY_TYPES = new Set([
+  "newOpportunity",
+  "matchScore",
+  "deadline",
+  "watchedCallOpen",
+  "watchedCallExtended",
+  "teamShare",
+]);
+
+/**
+ * Android channel per push type — ids must match MainActivity.kt and
+ * kAndroidChannels in push_notification_service.dart. Older installs that
+ * lack a channel fall back to the manifest default ("general").
+ */
+function channelForType(type) {
+  switch (type) {
+    case "newOpportunity":
+    case "matchScore":
+    case "watchedCallOpen":
+    case "watchedCallExtended":
+      return "opportunities";
+    case "deadline":
+      return "deadlines";
+    case "teamShare":
+      return "team";
+    case "weeklySummary":
+      return "summary";
+    default:
+      return "general";
+  }
+}
+
+/**
+ * How long FCM keeps trying to deliver to a device that's off/offline. A
+ * "deadline today" reminder or Monday summary arriving two days late is
+ * noise; a new tender is still worth knowing about for a few days.
+ */
+function ttlSecondsFor(type) {
+  if (type === "test") return 60 * 60;
+  if (type === "deadline" || type === "weeklySummary") return 24 * 60 * 60;
+  return 3 * 24 * 60 * 60;
+}
+
+/**
+ * Replace key: a newer alert about the same opportunity (e.g. its deadline
+ * reminder) replaces the older one on screen instead of stacking up.
+ */
+function tagFor(type, opportunityId) {
+  if (opportunityId != null) return `opp-${opportunityId}`;
+  if (type === "weeklySummary") return "weekly-summary";
+  return `jva-${type || "alert"}`;
 }
 
 /** Top-level device registry: one doc per FCM token, `{token, uid, platform, os, updatedAt, lastSentAt?}`. */
@@ -447,6 +530,9 @@ module.exports.shouldSendMatchScorePush = shouldSendMatchScorePush;
 module.exports.buildNotificationMessage = buildNotificationMessage;
 module.exports.collectRecipientTokens = collectRecipientTokens;
 module.exports.DEVICE_TOKENS = DEVICE_TOKENS;
+module.exports.channelForType = channelForType;
+module.exports.ttlSecondsFor = ttlSecondsFor;
+module.exports.tagFor = tagFor;
 module.exports.sendToTokens = sendToTokens;
 module.exports.notifyAllUsers = notifyAllUsers;
 module.exports.MATCH_SCORE_NOTIFY_THRESHOLD = MATCH_SCORE_NOTIFY_THRESHOLD;

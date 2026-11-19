@@ -165,17 +165,20 @@ test("carries the opportunity id as a string data payload for client-side deep-l
     opportunityId: "opp-42",
     score: 80,
   });
-  assert.deepEqual(message.data, { type: "matchScore", opportunityId: "opp-42" });
+  assert.equal(message.data.type, "matchScore");
+  assert.equal(message.data.opportunityId, "opp-42");
+  for (const v of Object.values(message.data)) assert.equal(typeof v, "string");
 });
 
-test("targets the 'general' Android channel at high priority so it shows as a heads-up banner", () => {
+test("targets the 'opportunities' Android channel at high priority so it shows as a heads-up banner", () => {
   const message = buildNotificationMessage("token-1", {
     opportunityTitle: "Tender",
     opportunityId: "opp-42",
     score: 80,
   });
-  assert.equal(message.android.notification.channelId, "general");
+  assert.equal(message.android.notification.channelId, "opportunities");
   assert.equal(message.android.priority, "high");
+  assert.equal(message.android.notification.icon, "ic_stat_jva");
 });
 
 test("newOpportunity type uses 'New opportunity' copy with the score in the title", () => {
@@ -187,7 +190,9 @@ test("newOpportunity type uses 'New opportunity' copy with the score in the titl
   });
   assert.equal(message.notification.title, "New opportunity — 84% match");
   assert.equal(message.notification.body, "Rosslyn compound roof replacement");
-  assert.deepEqual(message.data, { type: "newOpportunity", opportunityId: "opp-7" });
+  assert.equal(message.data.type, "newOpportunity");
+  assert.equal(message.data.opportunityId, "opp-7");
+  assert.equal(message.data.title, "New opportunity — 84% match");
 });
 
 test("web push links to the hosted app with the opportunity id for deep-linking", () => {
@@ -205,7 +210,8 @@ test("web push links to the hosted app with the opportunity id for deep-linking"
 
 test("test type carries no opportunity id and links to the app root", () => {
   const message = buildNotificationMessage("token-1", { type: "test" });
-  assert.deepEqual(message.data, { type: "test" });
+  assert.equal(message.data.type, "test");
+  assert.equal(message.data.opportunityId, undefined);
   assert.equal(message.webpush.fcmOptions.link, "https://jva-projecttracker.web.app/");
 });
 
@@ -237,6 +243,42 @@ test("deadline copy says 'in N days', 'tomorrow' and 'today'", () => {
   assert.equal(title(14), "Deadline in 14 days");
   assert.equal(title(1), "Deadline tomorrow");
   assert.equal(title(0), "Deadline today");
+});
+
+test("tender/grant alerts stay on screen; test and summary pushes don't", () => {
+  const sticky = (type) =>
+    buildNotificationMessage("t", { type, opportunityId: type === "test" || type === "weeklySummary" ? undefined : "o" })
+      .webpush.notification.requireInteraction;
+  for (const type of ["newOpportunity", "deadline", "teamShare", "watchedCallOpen", "matchScore"]) {
+    assert.equal(sticky(type), true, type);
+  }
+  assert.equal(sticky("test"), false);
+  assert.equal(sticky("weeklySummary"), false);
+});
+
+test("alerts about the same opportunity share one replace key on every platform", () => {
+  const a = buildNotificationMessage("t", { type: "newOpportunity", opportunityId: "abc", score: 80 });
+  const b = buildNotificationMessage("t", { type: "deadline", opportunityId: "abc", daysLeft: 3 });
+  assert.equal(a.webpush.notification.tag, "opp-abc");
+  assert.equal(b.webpush.notification.tag, "opp-abc");
+  assert.equal(b.android.notification.tag, "opp-abc");
+  assert.equal(b.android.collapseKey, "opp-abc");
+  assert.equal(b.apns.headers["apns-collapse-id"], "opp-abc");
+  assert.equal(b.webpush.notification.renotify, true);
+});
+
+test("channels, expiry per type", () => {
+  const { channelForType, ttlSecondsFor } = require("./matchScorePushNotification");
+  assert.equal(channelForType("deadline"), "deadlines");
+  assert.equal(channelForType("teamShare"), "team");
+  assert.equal(channelForType("weeklySummary"), "summary");
+  assert.equal(channelForType("watchedCallOpen"), "opportunities");
+  assert.equal(channelForType("test"), "general");
+  assert.equal(ttlSecondsFor("deadline"), 86400);
+  assert.equal(ttlSecondsFor("newOpportunity"), 259200);
+  const m = buildNotificationMessage("t", { type: "deadline", opportunityId: "x", daysLeft: 0 });
+  assert.equal(m.android.ttl, 86400 * 1000);
+  assert.equal(m.webpush.headers.TTL, "86400");
 });
 
 // --- collectRecipientTokens ------------------------------------------------

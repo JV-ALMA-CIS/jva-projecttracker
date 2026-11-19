@@ -38,7 +38,31 @@ firebase.initializeApp({
 // `webpush.fcmOptions.link` (the app URL with ?opportunityId=..., which
 // PushNotificationService reads on startup to deep-link).
 //
-// Do NOT add an onBackgroundMessage handler that calls showNotification, or
-// a custom notificationclick listener: the SDK already does both, so every
-// push would be shown twice and clicks would open duplicate windows.
+// Do NOT add an onBackgroundMessage handler that calls showNotification: the
+// SDK already displays background pushes, so every push would appear twice.
 firebase.messaging();
+
+// Clicks on notifications the APP shows itself while it's open (see
+// lib/services/web_system_notifier_web.dart — the SDK hands pushes to a
+// visible tab instead of displaying them). Those carry `data.jvaLink`; the
+// SDK's own notifications carry `data.FCM_MSG` and are left to the SDK's
+// handler (registered by firebase.messaging() above), so nothing is handled
+// twice. Focuses an open app tab and asks it to open the link in place;
+// opens a new tab only if none is open.
+self.addEventListener("notificationclick", (event) => {
+  const link = event.notification?.data?.jvaLink;
+  if (!link) return;
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const appTab = windows.find((c) => c.url.startsWith(self.location.origin));
+      if (appTab) {
+        await appTab.focus();
+        appTab.postMessage({ jvaOpen: link });
+        return;
+      }
+      await self.clients.openWindow(link);
+    })(),
+  );
+});

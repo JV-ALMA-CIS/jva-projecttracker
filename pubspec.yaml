@@ -41,6 +41,8 @@ dependencies:
   connectivity_plus: ^7.1.1
   file_picker: ^8.1.6
   mocktail: ^1.0.5
+  flutter_local_notifications: 22.3.3
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
