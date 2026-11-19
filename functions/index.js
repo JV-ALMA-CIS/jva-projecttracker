@@ -227,7 +227,13 @@ const GRANT_FOCUS_AREAS = [
   "Earth observation, space data, satellite, geospatial / GIS and AI innovation calls (e.g. ESA, Kenya Space Agency, ABIL, EU space programmes)",
   "digital agriculture, agritech, coffee traceability, EU deforestation regulation compliance and food-systems innovation funds",
   "software, AI and digital innovation grants and accelerators for African start-ups and SMEs (e.g. EIC, Global Gateway, AfDB, African Union, GSMA, foundations)",
-  "construction, infrastructure, facility management, energy and climate / green-building innovation grants",
+  "construction, infrastructure, facility management and climate / green-building innovation grants (no solar / energy-generation calls — not JVA's field)",
+  // Wider themes (Nov 2026) — the foundations, prizes and donor funds that
+  // publish recurring calls (see also the funder watchlist).
+  "cash prizes, challenges and competitions open to innovators and companies in Africa (climate, AI, agritech, engineering, social impact — e.g. Wilkes Climate Prize, Africa Prize for Engineering Innovation, Ashden Awards, Challenge Works, XPRIZE)",
+  "mobile, fintech, financial-inclusion and AI-for-good innovation funds open to African companies (e.g. GSMA Innovation Fund, UNICEF Venture Fund, Gates Foundation Grand Challenges, Mastercard Foundation, Google.org)",
+  "poverty-reduction and development innovation funds with staged pilot grants (e.g. DIV Fund — Development Innovation Ventures, Fund for Innovation in Development (FID), Global Innovation Fund, Grand Challenges Canada)",
+  "challenge funds and accelerators for African SMEs in climate adaptation, agribusiness, food security and digital services (e.g. AECF, Kenya Climate Innovation Center, Google for Startups Accelerator Africa, AfDB) — not solar / energy-generation",
 ];
 
 /**
@@ -475,9 +481,12 @@ exports.searchGrants = onCall({ timeoutSeconds: 540 }, async (request) => {
   return { created };
 });
 
-/** Scheduled: grant discovery every Monday, after tender discovery. */
+/**
+ * Scheduled: grant discovery twice a week — Monday (after tender discovery,
+ * before the 09:30 summary) and Thursday — at 08:30 Nairobi.
+ */
 exports.scheduledGrantDiscovery = onSchedule(
-  { schedule: "every monday 08:30", timeZone: "Africa/Nairobi", timeoutSeconds: 540 },
+  { schedule: "30 8 * * 1,4", timeZone: "Africa/Nairobi", timeoutSeconds: 540 },
   async () => {
     await runGrantDiscovery();
   },
@@ -1663,12 +1672,42 @@ exports.scheduledBusinessUnitBackfill = onSchedule(
   { schedule: "every 30 minutes", timeZone: "Africa/Nairobi", timeoutSeconds: 540 },
   async () => {
     await runBusinessUnitBackfillBatch();
+    // Scope rules (e.g. no solar) applied once to existing opportunities
+    // whenever SCOPE_POLICY_VERSION changes.
+    try {
+      await applyScopePolicyIfChanged();
+    } catch (e) {
+      logger.error("scope policy clean-up failed", e);
+    }
+    // Same background slot: eligibility for grants not checked yet (older
+    // ones, or ones whose check failed at creation).
+    try {
+      const r = await runEligibilityBackfill({ db, extract: extractEligibility });
+      if (r.checked || r.failed) logger.info(`eligibility backfill: ${JSON.stringify(r)}`);
+    } catch (e) {
+      logger.error("eligibility backfill failed", e);
+    }
   },
 );
 
 /** Callable: runBusinessUnitBackfillNow -> { assigned, none, errors, remaining } */
 exports.runBusinessUnitBackfillNow = onCall({ timeoutSeconds: 540 }, async () => {
   return runBusinessUnitBackfillBatch();
+});
+
+// Grant eligibility — see grantEligibility.js.
+const {
+  needsEligibilityCheck,
+  assessEligibility,
+  loadCompanyFacts,
+  runEligibilityBackfill,
+} = require("./grantEligibility");
+const extractEligibility = (prompt) => retryAsync(() => callGeminiForJson(prompt), { label: "grantEligibility" });
+
+/** Callable: runEligibilityBackfillNow -> {checked, failed, remaining} — checks up to 40 unchecked grants now. */
+exports.runEligibilityBackfillNow = onCall({ timeoutSeconds: 540 }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign-in required");
+  return runEligibilityBackfill({ db, extract: extractEligibility, limit: 40 });
 });
 
 /**
@@ -1683,6 +1722,63 @@ exports.cleanupPublicBuyers = onCall({ timeoutSeconds: 540 }, async () => {
     classify: classifyBuyers,
     logger,
   });
+});
+
+// Scope policy (work JVA doesn't do, e.g. solar) — see lib/scopePolicy.js.
+const { outOfScopeReason, outOfScopeArchiveUpdate } = require("./lib/scopePolicy");
+
+/**
+ * Archives every open opportunity whose title is out of scope (e.g. solar).
+ * Archived, never deleted. Returns {archived, titles}.
+ */
+async function archiveOutOfScopeOpportunities() {
+  const snap = await db.collection("opportunities").get();
+  const ts = admin.firestore.Timestamp.now();
+  const titles = [];
+  let batch = db.batch();
+  let pending = 0;
+  for (const doc of snap.docs) {
+    const o = doc.data();
+    if (["archived", "dismissed", "won", "lost"].includes(o.status)) continue;
+    const reason = outOfScopeReason(o);
+    if (!reason) continue;
+    batch.update(doc.ref, outOfScopeArchiveUpdate(reason, ts));
+    titles.push(o.title);
+    pending += 1;
+    if (pending === 400) {
+      await batch.commit();
+      batch = db.batch();
+      pending = 0;
+    }
+  }
+  if (pending > 0) await batch.commit();
+  logger.info(`archiveOutOfScope: archived ${titles.length}: ${JSON.stringify(titles)}`);
+  return { archived: titles.length, titles };
+}
+
+/**
+ * Bump when OUT_OF_SCOPE_PATTERNS (lib/scopePolicy.js) changes: the
+ * background slot then re-applies the scope rules to existing opportunities
+ * once (tracked on companySettings/scopePolicy), with no manual step.
+ */
+const SCOPE_POLICY_VERSION = 1;
+
+async function applyScopePolicyIfChanged() {
+  const ref = db.collection("companySettings").doc("scopePolicy");
+  const applied = (await ref.get()).data()?.appliedVersion;
+  if (applied === SCOPE_POLICY_VERSION) return null;
+  const result = await archiveOutOfScopeOpportunities();
+  await ref.set(
+    { appliedVersion: SCOPE_POLICY_VERSION, appliedAt: admin.firestore.Timestamp.now(), archived: result.titles },
+    { merge: true },
+  );
+  return result;
+}
+
+/** Callable (signed-in): archiveOutOfScope -> {archived, titles} — re-applies the scope rules now. */
+exports.archiveOutOfScope = onCall({ timeoutSeconds: 300 }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign-in required");
+  return archiveOutOfScopeOpportunities();
 });
 
 // Monday-morning summary push — see weeklySummary.js.
@@ -3682,6 +3778,20 @@ exports.scheduledCallPageWatch = makeScheduledCallPageWatch(extractWatchedPage);
 const { makeScheduledListingPageWatch, checkAllListingPages } = require("./listingPageWatcher");
 exports.scheduledListingPageWatch = makeScheduledListingPageWatch(extractWatchedPage);
 
+// Funder watchlist (foundations, prizes, accelerators, donor innovation funds) — see funderWatchlist.js.
+const { makeScheduledFunderWatch, checkAllFunderPages } = require("./funderWatchlist");
+exports.scheduledFunderWatch = makeScheduledFunderWatch(extractWatchedPage);
+
+/**
+ * Callable: checkFunderWatchlistNow({quiet?}) -> { [funderKey]: {status, created} } —
+ * runs the funder watchlist now. `quiet: true` saves calls without a push
+ * each (used for the very first run, which may find many at once).
+ */
+exports.checkFunderWatchlistNow = onCall({ timeoutSeconds: 540 }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign-in required");
+  return checkAllFunderPages({ db, extract: extractWatchedPage, quiet: request.data?.quiet === true });
+});
+
 /** Callable: checkWatchedListingPages -> { [pageKey]: counts } — runs the listing watcher now. */
 exports.checkWatchedListingPages = onCall({ timeoutSeconds: 300 }, async () => {
   return checkAllListingPages({ db, extract: extractWatchedPage });
@@ -3760,7 +3870,16 @@ exports.onOpportunityCreated = onDocumentCreated(
     if (!opportunity) return;
     const opportunityId = event.params.opportunityId;
 
-    // Buyer policy first: public-body tenders (not donor-funded) are
+    // Scope policy first: work JVA doesn't do (e.g. solar) is archived on
+    // arrival, whatever the source — no alert, no AI cost. lib/scopePolicy.js.
+    const outOfScope = outOfScopeReason(opportunity);
+    if (outOfScope) {
+      await event.data.ref.update(outOfScopeArchiveUpdate(outOfScope, admin.firestore.Timestamp.now()));
+      logger.info(`onOpportunityCreated: archived ${opportunityId} — out of scope (${outOfScope})`);
+      return;
+    }
+
+    // Buyer policy next: public-body tenders (not donor-funded) are
     // archived straight away — no alert, no scoring, no unit sorting.
     // See lib/buyerPolicy.js. On any error the opportunity is kept.
     try {
@@ -3784,8 +3903,24 @@ exports.onOpportunityCreated = onDocumentCreated(
       )
       : Promise.resolve();
 
+    // Grants/programmes: can JVA actually apply? Checked before any alert,
+    // so a "not eligible" call never pushes (matchNotifyScoreFor). A failed
+    // check is retried by the backfill in scheduledBusinessUnitBackfill.
+    let checked = opportunity;
+    if (needsEligibilityCheck(opportunity)) {
+      try {
+        const fields = await assessEligibility(event.data.ref, opportunity, {
+          extract: extractEligibility,
+          facts: await loadCompanyFacts(db),
+        });
+        checked = { ...opportunity, ...fields };
+      } catch (e) {
+        logger.error(`onOpportunityCreated: eligibility check failed for ${opportunityId}`, e);
+      }
+    }
+
     try {
-      await alertOrScoreNewOpportunity(event, opportunity, opportunityId);
+      await alertOrScoreNewOpportunity(event, checked, opportunityId);
     } finally {
       await unitsAssigned;
     }

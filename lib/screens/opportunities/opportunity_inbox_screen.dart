@@ -11,6 +11,7 @@ import 'package:jva_projecttracker/theme/app_theme.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/fade_slide_in.dart';
 import 'package:jva_projecttracker/widgets/fit_score_badge.dart';
+import 'package:jva_projecttracker/widgets/grant_eligibility_chips.dart';
 import 'package:jva_projecttracker/widgets/hover_lift.dart';
 import 'package:jva_projecttracker/widgets/share_with_team_dialog.dart';
 
@@ -260,6 +261,10 @@ class _InboxTile extends ConsumerWidget {
                         );
                       },
                     ),
+                  ],
+                  if (opportunity.kind != OpportunityKind.tender) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    GrantEligibilitySummary(opportunity: opportunity),
                   ],
                   if (duplicateOf != null) ...[
                     const SizedBox(height: AppSpacing.sm),

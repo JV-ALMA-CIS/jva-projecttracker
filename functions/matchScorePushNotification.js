@@ -32,6 +32,8 @@ function matchScoreBucket(score) {
 
 function matchNotifyScoreFor(opportunity) {
   if (CLOSED_STATUSES.has(opportunity.status)) return null;
+  // Grants/calls the company can't apply for (grantEligibility.js) never alert.
+  if (opportunity.eligibility === "notEligible") return null;
   const score =
     typeof opportunity.overallMatchScore === "number"
       ? opportunity.overallMatchScore
@@ -94,6 +96,9 @@ function notificationCopy(
   const title = opportunityTitle || "An opportunity";
   if (type === "weeklySummary") {
     return { title: summaryTitle || "Weekly summary", body: summaryBody || "" };
+  }
+  if (type === "fundingSummary") {
+    return { title: summaryTitle || "Funding open now", body: summaryBody || "" };
   }
   if (type === "teamShare") {
     const who = sharedByName || "A colleague";
@@ -189,6 +194,11 @@ function buildNotificationMessage(
     data.open = "inbox";
     link = `${WEB_APP_URL}?open=inbox`;
   }
+  // "Funding open now" opens the Opportunity Inbox on its Grants tab.
+  if (type === "fundingSummary") {
+    data.open = "grants";
+    link = `${WEB_APP_URL}?open=grants`;
+  }
   if (opportunityId != null) {
     data.opportunityId = String(opportunityId);
     link = `${WEB_APP_URL}?opportunityId=${encodeURIComponent(String(opportunityId))}`;
@@ -268,6 +278,7 @@ function channelForType(type) {
     case "teamShare":
       return "team";
     case "weeklySummary":
+    case "fundingSummary":
       return "summary";
     default:
       return "general";
@@ -281,7 +292,7 @@ function channelForType(type) {
  */
 function ttlSecondsFor(type) {
   if (type === "test") return 60 * 60;
-  if (type === "deadline" || type === "weeklySummary") return 24 * 60 * 60;
+  if (type === "deadline" || type === "weeklySummary" || type === "fundingSummary") return 24 * 60 * 60;
   return 3 * 24 * 60 * 60;
 }
 
@@ -292,6 +303,7 @@ function ttlSecondsFor(type) {
 function tagFor(type, opportunityId) {
   if (opportunityId != null) return `opp-${opportunityId}`;
   if (type === "weeklySummary") return "weekly-summary";
+  if (type === "fundingSummary") return "funding-summary";
   return `jva-${type || "alert"}`;
 }
 

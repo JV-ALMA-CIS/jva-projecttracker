@@ -1509,6 +1509,16 @@ class AppStrings {
       : 'Alerts for new tenders, grants and calls, deadline reminders and '
             'colleagues\' shares arrive on every computer and phone where '
             'you\'ve signed in and allowed notifications.';
+  String grantEligibilityLabel(GrantEligibility e) => switch (e) {
+    GrantEligibility.eligible => _it ? 'Ammissibile' : 'Eligible',
+    GrantEligibility.needsPartner =>
+      _it ? 'Serve un partner' : 'Needs a partner',
+    GrantEligibility.notEligible => _it ? 'Non ammissibile' : 'Not eligible',
+    GrantEligibility.unclear =>
+      _it ? 'Ammissibilità da verificare' : 'Eligibility unclear',
+  };
+  String matchFundingLabel(String text) =>
+      _it ? 'Cofinanziamento: $text' : 'Co-funding: $text';
   String get myDevicesTitle => _it
       ? 'I tuoi dispositivi che ricevono avvisi'
       : 'Your devices getting alerts';

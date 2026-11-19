@@ -323,6 +323,20 @@ extension DiscoverySourceTypeX on DiscoverySourceType {
 /// the opportunity's internal workflow lifecycle. Every `pipelineStage`
 /// transition is expected to go through [OpportunityService.transitionStage],
 /// which also writes a corresponding `OpportunityEvent` — see ADR-002.
+/// Can JVA apply to this grant/call? Written by the Cloud Functions'
+/// eligibility check (functions/grantEligibility.js); null for tenders and
+/// for grants not checked yet.
+enum GrantEligibility { eligible, needsPartner, notEligible, unclear }
+
+extension GrantEligibilityX on GrantEligibility {
+  static GrantEligibility? fromString(String? value) {
+    for (final GrantEligibility e in GrantEligibility.values) {
+      if (e.name == value) return e;
+    }
+    return null;
+  }
+}
+
 class Opportunity {
   final String id;
   final String title;
@@ -441,6 +455,22 @@ class Opportunity {
 
   /// Tender vs grant vs programme — see [OpportunityKind].
   final OpportunityKind kind;
+
+  // --- Grant eligibility (server-written, read-only here) ---
+  // Deliberately NOT in [toMap]: the app only updates fields it owns, so
+  // these survive every client edit.
+
+  /// Can JVA apply? Null for tenders and unchecked grants.
+  final GrantEligibility? eligibility;
+
+  /// One-line reason, e.g. "For-profit SMEs in Kenya eligible; 25% matching funds".
+  final String? eligibilityNote;
+
+  /// Amount or range as the funder states it, e.g. "£100,000–£250,000".
+  final String? fundingAmount;
+
+  /// Co-funding requirement, e.g. "25% matching funds".
+  final String? matchFunding;
 
   // --- Tender Source / Discovery Engine v2 (Milestone 3.8a) ---
   // Written by createOpportunitiesFromCandidates() in Cloud Functions for
@@ -591,6 +621,10 @@ class Opportunity {
     this.discoverySourceType,
     this.geographyPriority,
     this.kind = OpportunityKind.tender,
+    this.eligibility,
+    this.eligibilityNote,
+    this.fundingAmount,
+    this.matchFunding,
     this.tenderSourceId,
     this.tenderSourceCategory,
     this.tenderDiscoveryMethod,
@@ -664,6 +698,9 @@ class Opportunity {
     this.requiredCertifications = const [],
   });
 
+  static String? _nonEmpty(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value.trim() : null;
+
   factory Opportunity.fromMap(String id, Map<String, dynamic> map) {
     return Opportunity(
       id: id,
@@ -702,6 +739,10 @@ class Opportunity {
           ? GeographyPriorityX.fromString(map['geographyPriority'] as String)
           : null,
       kind: OpportunityKindX.fromString(map['kind'] as String?),
+      eligibility: GrantEligibilityX.fromString(map['eligibility'] as String?),
+      eligibilityNote: _nonEmpty(map['eligibilityNote']),
+      fundingAmount: _nonEmpty(map['fundingAmount']),
+      matchFunding: _nonEmpty(map['matchFunding']),
       tenderSourceId: map['tenderSourceId'] as String?,
       tenderSourceCategory: map['tenderSourceCategory'] != null
           ? TenderSourceCategory.values.firstWhere(

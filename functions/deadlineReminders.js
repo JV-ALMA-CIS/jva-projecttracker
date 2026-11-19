@@ -38,6 +38,9 @@ function toDate(value) {
  */
 function reminderDue(opportunity, now = new Date()) {
   if (!opportunity || NO_REMINDER_STATUSES.has(opportunity.status)) return null;
+  // A grant we can't apply for (grantEligibility.js) — unless someone on
+  // the team has started reviewing it anyway.
+  if (opportunity.eligibility === "notEligible" && opportunity.status !== "reviewing") return null;
   const qualifies =
     matchNotifyScoreFor(opportunity) != null ||
     opportunity.status === "reviewing" ||

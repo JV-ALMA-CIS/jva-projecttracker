@@ -108,6 +108,10 @@ void main() {
       expect(navigationDataFromLink('/?open=inbox'), {'open': 'inbox'});
     });
 
+    test('reads the grants link (Funding open now)', () {
+      expect(navigationDataFromLink('/?open=grants'), {'open': 'grants'});
+    });
+
     test('anything else opens nothing', () {
       expect(
         navigationDataFromLink('https://jva-projecttracker.web.app/'),

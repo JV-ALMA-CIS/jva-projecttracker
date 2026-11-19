@@ -9,8 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jva_projecttracker/firebase_options.dart';
+import 'package:jva_projecttracker/models/opportunity.dart';
 import 'package:jva_projecttracker/screens/opportunities/opportunity_workspace_screen.dart';
 import 'package:jva_projecttracker/services/core/navigation_providers.dart';
+import 'package:jva_projecttracker/services/opportunities/inbox_view.dart';
 import 'package:jva_projecttracker/services/web_system_notifier_stub.dart'
     if (dart.library.js_interop) 'package:jva_projecttracker/services/web_system_notifier_web.dart';
 
@@ -45,6 +47,7 @@ Map<String, dynamic> navigationDataFromLink(String link) {
   final Map<String, String> query =
       Uri.tryParse(link)?.queryParameters ?? const {};
   if (query['open'] == 'inbox') return const {'open': 'inbox'};
+  if (query['open'] == 'grants') return const {'open': 'grants'};
   final String? id = opportunityIdFromMessageData(query);
   if (id == null) return const {};
   return {kNotificationDataOpportunityIdKey: id};
@@ -308,7 +311,9 @@ class PushNotificationService {
     if (messenger == null) return;
 
     final bool canOpen =
-        opportunityIdFromMessageData(data) != null || data['open'] == 'inbox';
+        opportunityIdFromMessageData(data) != null ||
+        data['open'] == 'inbox' ||
+        data['open'] == 'grants';
     final colors = Theme.of(context).colorScheme;
     messenger.hideCurrentMaterialBanner();
     messenger.showMaterialBanner(
@@ -373,11 +378,18 @@ class PushNotificationService {
     GlobalKey<NavigatorState> navigatorKey,
   ) {
     // Weekly summary: back to the main screen, on the Opportunity Inbox.
-    if (data['open'] == 'inbox') {
+    // "Funding open now": the same, on the Inbox's Grants tab.
+    if (data['open'] == 'inbox' || data['open'] == 'grants') {
       final context = navigatorKey.currentContext;
       if (context == null) return;
       navigatorKey.currentState?.popUntil((route) => route.isFirst);
-      openOpportunityInbox(ProviderScope.containerOf(context, listen: false));
+      final container = ProviderScope.containerOf(context, listen: false);
+      if (data['open'] == 'grants') {
+        container
+            .read(inboxViewProvider.notifier)
+            .setKind(OpportunityKind.grant);
+      }
+      openOpportunityInbox(container);
       return;
     }
 

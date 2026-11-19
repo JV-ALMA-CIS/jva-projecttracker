@@ -30,6 +30,7 @@ import 'package:jva_projecttracker/services/providers.dart';
 import 'package:jva_projecttracker/services/strategic_review_service.dart';
 import 'package:jva_projecttracker/theme/app_page_route.dart';
 import 'package:jva_projecttracker/theme/app_theme.dart';
+import 'package:jva_projecttracker/widgets/grant_eligibility_chips.dart';
 import 'package:jva_projecttracker/widgets/share_with_team_dialog.dart';
 import 'package:jva_projecttracker/widgets/empty_state.dart';
 import 'package:jva_projecttracker/widgets/fit_score_badge.dart';
@@ -389,6 +390,10 @@ class _OpportunityWorkspaceScreenState
                     color: theme.colorScheme.outline,
                   ),
                 ),
+              ],
+              if (o.kind != OpportunityKind.tender) ...[
+                const SizedBox(height: AppSpacing.md),
+                GrantEligibilitySummary(opportunity: o),
               ],
               if (o.assignedTo?.isNotEmpty ?? false) ...[
                 const SizedBox(height: AppSpacing.xs),

@@ -3,7 +3,7 @@
  *   node functions/weeklySummary.test.js
  */
 const assert = require("node:assert/strict");
-const { computeWeeklySummary, summaryCopy } = require("./weeklySummary");
+const { computeWeeklySummary, summaryCopy, computeFundingOpenNow, fundingCopy } = require("./weeklySummary");
 const { buildNotificationMessage } = require("./matchScorePushNotification");
 
 let passed = 0;
@@ -78,6 +78,56 @@ test("the push opens the Inbox (app data + web link)", () => {
   assert.equal(m.notification.body, "Tenders 3");
   assert.equal(m.data.open, "inbox");
   assert.equal(m.webpush.fcmOptions.link, "https://jva-projecttracker.web.app/?open=inbox");
+});
+
+// --- Funding open now -------------------------------------------------------
+
+const grants = [
+  { title: "GSMA Innovation Fund for AI-enabled financial health", kind: "grant", status: "discovered", eligibility: "eligible", deadline: inDays(24), fundingAmount: "£100,000–£250,000" },
+  { title: "FID open call", kind: "grant", status: "discovered", eligibility: "eligible" }, // rolling
+  { title: "Horizon AI robotics", kind: "grant", status: "discovered", eligibility: "needsPartner", deadline: inDays(60) },
+  { title: "AI for Good Innovation Factory", kind: "programme", status: "discovered", eligibility: "unclear", deadline: inDays(4) },
+  // Left out: not eligible, deadline passed, archived, a tender.
+  { title: "Japan GGP Kenya", kind: "grant", status: "discovered", eligibility: "notEligible", deadline: inDays(70) },
+  { title: "Old prize", kind: "grant", status: "discovered", eligibility: "eligible", deadline: daysAgo(2) },
+  { title: "Archived call", kind: "grant", status: "archived", eligibility: "eligible", deadline: inDays(9) },
+  { title: "Some tender", kind: "tender", status: "discovered", deadline: inDays(9) },
+];
+
+test("funding: counts open grants JVA can apply for or join with a partner", () => {
+  const f = computeFundingOpenNow({ opportunities: grants, now: NOW });
+  assert.equal(f.total, 4);
+  assert.equal(f.canApply, 3);
+  assert.equal(f.needPartner, 1);
+});
+
+test("funding: next three are soonest first, rolling last", () => {
+  const f = computeFundingOpenNow({ opportunities: grants, now: NOW });
+  assert.deepEqual(
+    f.next.map((n) => n.title),
+    ["AI for Good Innovation Factory", "GSMA Innovation Fund for AI-enabled financial health", "Horizon AI robotics"],
+  );
+});
+
+test("funding copy names deadlines and amounts, Synnefa-style", () => {
+  const copy = fundingCopy(computeFundingOpenNow({ opportunities: grants, now: NOW }));
+  assert.equal(copy.title, "Funding open now: 4 grants & calls");
+  assert.match(copy.body, /^3 you can apply for, 1 needs a partner\. Next: /);
+  assert.match(copy.body, /AI for Good Innovation Factory — 27 Nov/);
+  assert.match(copy.body, /— 17 Dec \(£100,000–£250,000\)/);
+});
+
+test("funding copy: nothing open means no push", () => {
+  assert.equal(fundingCopy(computeFundingOpenNow({ opportunities: [], now: NOW })), null);
+});
+
+test("funding push opens the Inbox on Grants", () => {
+  const m = buildNotificationMessage("t", { type: "fundingSummary", summaryTitle: "Funding open now: 4", summaryBody: "x" });
+  assert.equal(m.notification.title, "Funding open now: 4");
+  assert.equal(m.data.open, "grants");
+  assert.equal(m.webpush.fcmOptions.link, "https://jva-projecttracker.web.app/?open=grants");
+  assert.equal(m.android.notification.channelId, "summary");
+  assert.equal(m.webpush.notification.requireInteraction, false);
 });
 
 console.log(`\n${passed} test(s) passed`);

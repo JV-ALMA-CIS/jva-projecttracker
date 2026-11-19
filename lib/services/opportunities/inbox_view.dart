@@ -35,6 +35,35 @@ int compareForInbox(Opportunity a, Opportunity b) {
   return b.discoveredAt.compareTo(a.discoveredAt);
 }
 
+int _eligibilityRank(Opportunity o) => switch (o.eligibility) {
+  GrantEligibility.notEligible => 2,
+  GrantEligibility.needsPartner => 1,
+  _ => 0,
+};
+
+/// Grants & programmes order (Synnefa-style "funding open now"): ones JVA
+/// can apply for first, then ones needing a partner, not-eligible last;
+/// within each, soonest deadline first (rolling last), then best match.
+/// Funder-watchlist calls have no match score, so ranking grants by score
+/// (as tenders are) would bury them.
+int compareGrantsForInbox(Opportunity a, Opportunity b) {
+  final byEligibility = _eligibilityRank(a).compareTo(_eligibilityRank(b));
+  if (byEligibility != 0) return byEligibility;
+  final da = a.deadline;
+  final db = b.deadline;
+  if (da != null && db != null) {
+    final byDeadline = da.compareTo(db);
+    if (byDeadline != 0) return byDeadline;
+  } else if (da != null) {
+    return -1;
+  } else if (db != null) {
+    return 1;
+  }
+  final byScore = inboxScore(b).compareTo(inboxScore(a));
+  if (byScore != 0) return byScore;
+  return b.discoveredAt.compareTo(a.discoveredAt);
+}
+
 /// How many Inbox items there are of each kind (for the tab labels).
 Map<OpportunityKind, int> inboxKindCounts(List<Opportunity> inbox) {
   final counts = {for (final k in OpportunityKind.values) k: 0};
@@ -50,9 +79,11 @@ List<Opportunity> inboxSlice(
   required OpportunityKind kind,
   OpportunityBuFilter businessUnit = const OpportunityBuFilter.all(),
 }) {
-  return inbox
+  final List<Opportunity> slice = inbox
       .where((o) => o.kind == kind && matchesBuFilter(o, businessUnit))
       .toList();
+  if (kind != OpportunityKind.tender) slice.sort(compareGrantsForInbox);
+  return slice;
 }
 
 /// One person's remembered Inbox selection.

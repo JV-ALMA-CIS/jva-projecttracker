@@ -75,6 +75,71 @@ function summaryCopy(s) {
   return { title, body: parts.join(" · ") };
 }
 
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "17 Dec" (Nairobi date). */
+function shortDay(d) {
+  const local = new Date(d.getTime() + 3 * 60 * 60 * 1000);
+  return `${local.getUTCDate()} ${SHORT_MONTHS[local.getUTCMonth()]}`;
+}
+
+/** Trims a long call name to [max] characters at a word boundary. */
+function shortName(title, max = 48) {
+  const t = String(title || "").replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 20)).replace(/[\s,;:—-]+$/, "")}…`;
+}
+
+/**
+ * Pure: grants / calls / programmes still open today that JVA can apply
+ * for — on its own ("eligible", or not checked yet) or with a partner
+ * ("needsPartner"). Not-eligible ones and past deadlines are left out.
+ * Sorted by deadline (soonest first), rolling calls last.
+ */
+function computeFundingOpenNow({ opportunities, now = new Date() }) {
+  const open = opportunities.filter((o) => {
+    if (o.kind !== "grant" && o.kind !== "programme") return false;
+    if (CLOSED.has(o.status)) return false;
+    if (o.eligibility === "notEligible") return false;
+    const d = toDate(o.deadline);
+    return !d || d > now;
+  });
+  const deadlineOf = (o) => toDate(o.deadline)?.getTime() ?? Number.POSITIVE_INFINITY;
+  open.sort((a, b) => deadlineOf(a) - deadlineOf(b));
+  return {
+    total: open.length,
+    canApply: open.filter((o) => o.eligibility !== "needsPartner").length,
+    needPartner: open.filter((o) => o.eligibility === "needsPartner").length,
+    // Soonest first, preferring ones JVA can apply to alone.
+    next: [
+      ...open.filter((o) => o.eligibility === "eligible"),
+      ...open.filter((o) => o.eligibility !== "eligible"),
+    ]
+      .sort((a, b) => deadlineOf(a) - deadlineOf(b))
+      .slice(0, 3)
+      .map((o) => ({
+        title: o.title,
+        deadline: toDate(o.deadline),
+        fundingAmount: o.fundingAmount || "",
+      })),
+  };
+}
+
+/** Pure: the "Funding open now" push copy, or null when nothing is open. */
+function fundingCopy(f) {
+  if (f.total === 0) return null;
+  const title = `Funding open now: ${f.total} grant${f.total === 1 ? "" : "s"} & call${f.total === 1 ? "" : "s"}`;
+  const counts = [];
+  if (f.canApply > 0) counts.push(`${f.canApply} you can apply for`);
+  if (f.needPartner > 0) counts.push(`${f.needPartner} need${f.needPartner === 1 ? "s" : ""} a partner`);
+  const items = f.next.map((n) => {
+    const when = n.deadline ? shortDay(n.deadline) : "rolling";
+    return `${shortName(n.title)} — ${when}${n.fundingAmount ? ` (${n.fundingAmount})` : ""}`;
+  });
+  const body = [counts.join(", "), items.length ? `Next: ${items.join(" · ")}` : ""].filter(Boolean).join(". ");
+  return { title, body };
+}
+
 /** Loads the data, builds the summary and (unless [dryRun]) pushes it. */
 async function sendWeeklySummary({ db = admin.firestore(), now = new Date(), dryRun = false, notify = notifyAllUsers } = {}) {
   const weekAgo = admin.firestore.Timestamp.fromDate(new Date(now.getTime() - 7 * DAY_MS));
@@ -90,11 +155,16 @@ async function sendWeeklySummary({ db = admin.firestore(), now = new Date(), dry
     now,
   });
   const copy = summaryCopy(summary);
-  logger.info(`weeklySummary: ${JSON.stringify({ summary, copy, dryRun })}`);
-  if (copy && !dryRun) {
-    await notify({ type: "weeklySummary", summaryTitle: copy.title, summaryBody: copy.body });
+  const funding = computeFundingOpenNow({ opportunities: oppSnap.docs.map((d) => d.data()), now });
+  const fundingText = fundingCopy(funding);
+  logger.info(`weeklySummary: ${JSON.stringify({ summary, copy, funding: fundingText, dryRun })}`);
+  if (!dryRun) {
+    if (copy) await notify({ type: "weeklySummary", summaryTitle: copy.title, summaryBody: copy.body });
+    if (fundingText) {
+      await notify({ type: "fundingSummary", summaryTitle: fundingText.title, summaryBody: fundingText.body });
+    }
   }
-  return { summary, copy, sent: Boolean(copy && !dryRun) };
+  return { summary, copy, funding: fundingText, sent: Boolean((copy || fundingText) && !dryRun) };
 }
 
 /** Monday 09:30 Nairobi — after the Monday tender (08:00) and grant (08:30) searches. */
@@ -105,4 +175,11 @@ const scheduledWeeklySummary = onSchedule(
   },
 );
 
-module.exports = { computeWeeklySummary, summaryCopy, sendWeeklySummary, scheduledWeeklySummary };
+module.exports = {
+  computeWeeklySummary,
+  summaryCopy,
+  computeFundingOpenNow,
+  fundingCopy,
+  sendWeeklySummary,
+  scheduledWeeklySummary,
+};
