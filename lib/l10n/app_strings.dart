@@ -1519,6 +1519,63 @@ class AppStrings {
   };
   String matchFundingLabel(String text) =>
       _it ? 'Cofinanziamento: $text' : 'Co-funding: $text';
+  // Project types (construction / IT / agritech / FM / oil & gas)
+  String get fieldProjectType => _it ? 'Tipo di progetto' : 'Project type';
+  String projectTypeLabel(ProjectType t) => switch (t) {
+    ProjectType.construction =>
+      _it ? 'Costruzioni e lavori' : 'Construction & Works',
+    ProjectType.itSoftware => _it ? 'IT e software' : 'IT & Software',
+    ProjectType.agritech => _it ? 'Agritech' : 'Agritech',
+    ProjectType.facilityManagement =>
+      _it ? 'Facility management' : 'Facility Management',
+    ProjectType.oilGasInspection =>
+      _it ? 'Ispezioni oil & gas' : 'Oil & Gas Inspection',
+  };
+  String digitalCategoryLabel(DigitalCategory c) => switch (c) {
+    DigitalCategory.softwarePlatform =>
+      _it ? 'Piattaforma software' : 'Software platform',
+    DigitalCategory.mobileApp => _it ? 'App mobile' : 'Mobile app',
+    DigitalCategory.gisSatellite =>
+      _it ? 'GIS e dati satellitari' : 'GIS & satellite data',
+    DigitalCategory.aiAnalytics => _it ? 'IA e analisi dati' : 'AI & analytics',
+    DigitalCategory.iot => 'IoT',
+    DigitalCategory.systemsIntegration =>
+      _it ? 'Integrazione di sistemi' : 'Systems integration',
+  };
+  String get deliveryModelFieldLabel =>
+      _it ? 'Modalità di realizzazione' : 'Delivery model';
+  String deliveryModelLabel(DeliveryModel m) => switch (m) {
+    DeliveryModel.inHouseProduct =>
+      _it ? 'Prodotto interno' : 'In-house product',
+    DeliveryModel.clientContract =>
+      _it ? 'Contratto con cliente' : 'Client contract',
+    DeliveryModel.pilotPartnership =>
+      _it ? 'Pilota / partnership' : 'Pilot / partnership',
+  };
+  String get techStackHelper => _it
+      ? 'Separate da virgole, es. Flutter, Firebase, Vertex AI'
+      : 'Comma-separated, e.g. Flutter, Firebase, Vertex AI';
+  String get fieldProductUrl =>
+      _it ? 'Link (Play Store / sito)' : 'Link (Play Store / website)';
+  String get fieldUsersScale => _it ? 'Utenti / scala' : 'Users / scale';
+  String get usersScaleHelper =>
+      _it ? 'es. 1.200 agricoltori, 3 siti' : 'e.g. 1,200 farmers, 3 sites';
+  String get fieldFeaturesScope =>
+      _it ? 'Funzionalità e ambito' : 'Features & scope';
+  String get contractValueInHouseHelper => _it
+      ? 'Lasciare vuoto per i prodotti interni.'
+      : 'Leave blank for in-house products.';
+  String get fieldInspectionType =>
+      _it ? 'Tipo di ispezione' : 'Inspection type';
+  String get fieldInspectionStandard => _it ? 'Norma / standard' : 'Standard';
+  String get inspectionStandardHelper =>
+      _it ? 'es. API 653, API 510' : 'e.g. API 653, API 510';
+  String get fieldFacility => _it ? 'Impianto' : 'Facility';
+  String get facilityHelper => _it
+      ? 'es. deposito, impianto GPL, stazione'
+      : 'e.g. depot, LPG plant, station';
+  String get fieldBusinessUnits => _it ? 'Unità di business' : 'Business units';
+
   String get openOfficialPageButton =>
       _it ? 'Apri la pagina ufficiale' : 'Open the official page';
   String get openPageShort => _it ? 'Apri pagina' : 'Open page';

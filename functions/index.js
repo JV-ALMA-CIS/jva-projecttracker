@@ -71,9 +71,29 @@ async function buildCompanyProfile() {
     db.collection("applications").limit(100).get(),
   ]);
 
+  const TYPE_LABELS = {
+    construction: "Construction & Works",
+    itSoftware: "IT & Software",
+    agritech: "Agritech",
+    facilityManagement: "Facility Management",
+    oilGasInspection: "Oil & Gas Inspection",
+  };
+  const DELIVERY_LABELS = { inHouseProduct: "in-house product", clientContract: "client contract", pilotPartnership: "pilot / partnership" };
   const projects = projectsSnap.docs.map((d) => {
     const p = d.data();
-    return `- ${p.name} (${p.status}) for ${p.client || "internal"}: ${p.description || ""} [${(p.techStack || []).join(", ")}]`;
+    const extras = [
+      TYPE_LABELS[p.projectType] || TYPE_LABELS.construction,
+      DELIVERY_LABELS[p.deliveryModel],
+      p.usersScale,
+      p.inspectionType && `inspection: ${p.inspectionType}${p.inspectionStandard ? ` (${p.inspectionStandard})` : ""}`,
+      p.facility && `facility: ${p.facility}`,
+      p.productUrl,
+    ].filter(Boolean);
+    const scope = String(p.scopeOfWorks || "").replace(/\s+/g, " ").slice(0, 300);
+    return (
+      `- ${p.name} (${p.status}; ${extras.join("; ")}) for ${p.client || "internal"}: ${p.description || ""}` +
+      `${scope ? ` Scope: ${scope}` : ""} [${(p.techStack || []).join(", ")}]`
+    );
   });
 
   const applications = applicationsSnap.docs.map((d) => {
@@ -516,7 +536,11 @@ const TENDER_FOCUS_AREAS = [
   "facility management, cleaning, security, building maintenance, landscaping and property services contracts for UN agencies, embassies, NGOs and private companies in Kenya",
   "works, maintenance and services for embassies, high commissions and diplomatic compounds in Kenya and East Africa (RFQs, renovations, maintenance contracts)",
   "agribusiness, agricultural value chains, agro-processing, farmer advisory, irrigation and digital agriculture tenders and consultancies (FAO, IFAD, WFP, GIZ, SNV, NGOs, donor projects) in Kenya and East Africa",
-  "oil & gas inspection, testing, NDT, calibration, maintenance and technical services for petroleum depots, pipelines, retail fuel stations and upstream projects (EACOP, Tilenga, Kingfisher, TotalEnergies, Vivo Energy, Rubis, Ola Energy) in Kenya, Uganda and Tanzania",
+  // Oil & gas inspection — three focused searches (one broad search found
+  // almost no real inspection work).
+  "oil & gas INSPECTION services in Kenya: storage-tank inspection (API 653) and tank calibration, pressure-vessel and piping inspection (API 510 / 570), NDT, pipeline integrity and cathodic-protection surveys at petroleum depots, LPG plants and retail fuel stations — buyers such as Vivo Energy, Rubis, TotalEnergies Marketing Kenya, Ola Energy, Gulf Energy, Hass Petroleum, LPG distributors and terminal operators",
+  "upstream and midstream oil & gas inspection, QA/QC, NDT, HSE audit and maintenance subcontracts in Uganda and Tanzania — EACOP pipeline, Tilenga (TotalEnergies EP Uganda), Kingfisher (CNOOC Uganda), Hoima refinery and Tanzania LNG / gas projects, including their main contractors' local-content subcontract notices",
+  "third-party inspection, certification and testing tenders for fuel and gas equipment in East Africa: weighbridge and flow-meter calibration, LPG cylinder testing, fire-suppression and gas-detection system inspection, statutory inspection of lifting equipment and pressure systems, environmental and safety compliance audits for petroleum facilities",
   "ICT, software development, digital platforms, GIS / mapping and data systems tenders and consultancies by donors, UN agencies, NGOs and private companies in Kenya and East Africa",
   "human resources consultancy, recruitment, payroll and staffing services tenders by NGOs, UN agencies and private companies in Kenya",
 ];

@@ -57,12 +57,22 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   final _scopeOfWorksController = TextEditingController();
   final _notesController = TextEditingController();
   final _contractValueController = TextEditingController();
+  final _techStackController = TextEditingController();
+  final _productUrlController = TextEditingController();
+  final _usersScaleController = TextEditingController();
+  final _inspectionTypeController = TextEditingController();
+  final _inspectionStandardController = TextEditingController();
+  final _facilityController = TextEditingController();
 
   ProjectStatus _status = ProjectStatus.planned;
   ProjectCategory _category = ProjectCategory.other;
   ContractorRole _contractorRole = ContractorRole.mainContractor;
   ClientType _clientType = ClientType.privateClient;
   String _currency = 'EUR';
+  ProjectType _projectType = ProjectType.construction;
+  DigitalCategory? _digitalCategory;
+  DeliveryModel _deliveryModel = DeliveryModel.inHouseProduct;
+  Set<String> _businessUnitIds = <String>{};
 
   bool _saving = false;
   bool _initialized = false;
@@ -101,6 +111,16 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
     _contractorRole = p.contractorRole;
     _clientType = p.clientType;
     _currency = p.contractValueCurrency;
+    _projectType = p.projectType;
+    _digitalCategory = p.digitalCategory;
+    _deliveryModel = p.deliveryModel ?? DeliveryModel.inHouseProduct;
+    _businessUnitIds = p.businessUnitIds.toSet();
+    _techStackController.text = p.techStack.join(', ');
+    _productUrlController.text = p.productUrl;
+    _usersScaleController.text = p.usersScale;
+    _inspectionTypeController.text = p.inspectionType;
+    _inspectionStandardController.text = p.inspectionStandard;
+    _facilityController.text = p.facility;
     // Rebuild so dropdowns / segmented buttons pick up seeded values.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() {});
@@ -118,8 +138,21 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
     _scopeOfWorksController.dispose();
     _notesController.dispose();
     _contractValueController.dispose();
+    _techStackController.dispose();
+    _productUrlController.dispose();
+    _usersScaleController.dispose();
+    _inspectionTypeController.dispose();
+    _inspectionStandardController.dispose();
+    _facilityController.dispose();
     super.dispose();
   }
+
+  /// The Technologies field as a clean list ("Flutter, Firebase" -> 2 items).
+  List<String> _techStack() => _techStackController.text
+      .split(',')
+      .map((t) => t.trim())
+      .where((t) => t.isNotEmpty)
+      .toList();
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -202,6 +235,16 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
           projectSize: _projectSizeController.text.trim(),
           clientType: _clientType,
           sourceOpportunityId: sourceOpportunityId,
+          businessUnitIds: _businessUnitIds.toList(),
+          projectType: _projectType,
+          digitalCategory: _projectType.isDigital ? _digitalCategory : null,
+          deliveryModel: _projectType.isDigital ? _deliveryModel : null,
+          techStack: _techStack(),
+          productUrl: _productUrlController.text.trim(),
+          usersScale: _usersScaleController.text.trim(),
+          inspectionType: _inspectionTypeController.text.trim(),
+          inspectionStandard: _inspectionStandardController.text.trim(),
+          facility: _facilityController.text.trim(),
         ),
       );
 
@@ -241,6 +284,16 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
           contractorRole: _contractorRole,
           projectSize: _projectSizeController.text.trim(),
           clientType: _clientType,
+          businessUnitIds: _businessUnitIds.toList(),
+          projectType: _projectType,
+          digitalCategory: _projectType.isDigital ? _digitalCategory : null,
+          deliveryModel: _projectType.isDigital ? _deliveryModel : null,
+          techStack: _techStack(),
+          productUrl: _productUrlController.text.trim(),
+          usersScale: _usersScaleController.text.trim(),
+          inspectionType: _inspectionTypeController.text.trim(),
+          inspectionStandard: _inspectionStandardController.text.trim(),
+          facility: _facilityController.text.trim(),
         ),
       );
     }
@@ -506,21 +559,52 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
             title: strings.sectionClassification,
             accentColor: AppStatusColors.operations,
           ),
+          DropdownButtonFormField<ProjectType>(
+            key: ValueKey('projectType-$_projectType'),
+            initialValue: _projectType,
+            decoration: InputDecoration(labelText: strings.fieldProjectType),
+            items: ProjectType.values
+                .map(
+                  (t) => DropdownMenuItem(
+                    value: t,
+                    child: Text(strings.projectTypeLabel(t)),
+                  ),
+                )
+                .toList(),
+            onChanged: (v) => setState(() => _projectType = v ?? _projectType),
+          ),
+          const SizedBox(height: 16),
           AdaptiveFieldRow(
             children: [
-              DropdownButtonFormField<ProjectCategory>(
-                initialValue: _category,
-                decoration: InputDecoration(labelText: strings.fieldCategory),
-                items: ProjectCategory.values
-                    .map(
-                      (c) => DropdownMenuItem(
-                        value: c,
-                        child: Text(strings.projectCategoryLabel(c)),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => _category = v ?? _category),
-              ),
+              if (_projectType.isDigital)
+                DropdownButtonFormField<DigitalCategory>(
+                  key: ValueKey('digitalCategory-$_digitalCategory'),
+                  initialValue: _digitalCategory,
+                  decoration: InputDecoration(labelText: strings.fieldCategory),
+                  items: DigitalCategory.values
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c,
+                          child: Text(strings.digitalCategoryLabel(c)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => _digitalCategory = v),
+                )
+              else
+                DropdownButtonFormField<ProjectCategory>(
+                  initialValue: _category,
+                  decoration: InputDecoration(labelText: strings.fieldCategory),
+                  items: ProjectCategory.values
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c,
+                          child: Text(strings.projectCategoryLabel(c)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => _category = v ?? _category),
+                ),
               DropdownButtonFormField<ProjectStatus>(
                 initialValue: _status,
                 decoration: InputDecoration(labelText: strings.fieldStatus),
@@ -539,29 +623,54 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
           const SizedBox(height: 16),
           AdaptiveFieldRow(
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    strings.contractorRoleFieldLabel,
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  SegmentedButton<ContractorRole>(
-                    segments: ContractorRole.values
-                        .map(
-                          (r) => ButtonSegment(
-                            value: r,
-                            label: Text(strings.contractorRoleLabel(r)),
-                          ),
-                        )
-                        .toList(),
-                    selected: {_contractorRole},
-                    onSelectionChanged: (s) =>
-                        setState(() => _contractorRole = s.first),
-                  ),
-                ],
-              ),
+              if (_projectType.isDigital)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      strings.deliveryModelFieldLabel,
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<DeliveryModel>(
+                      segments: DeliveryModel.values
+                          .map(
+                            (m) => ButtonSegment(
+                              value: m,
+                              label: Text(strings.deliveryModelLabel(m)),
+                            ),
+                          )
+                          .toList(),
+                      selected: {_deliveryModel},
+                      onSelectionChanged: (s) =>
+                          setState(() => _deliveryModel = s.first),
+                    ),
+                  ],
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      strings.contractorRoleFieldLabel,
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<ContractorRole>(
+                      segments: ContractorRole.values
+                          .map(
+                            (r) => ButtonSegment(
+                              value: r,
+                              label: Text(strings.contractorRoleLabel(r)),
+                            ),
+                          )
+                          .toList(),
+                      selected: {_contractorRole},
+                      onSelectionChanged: (s) =>
+                          setState(() => _contractorRole = s.first),
+                    ),
+                  ],
+                ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -587,6 +696,11 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          _BusinessUnitChips(
+            selected: _businessUnitIds,
+            onChanged: (ids) => setState(() => _businessUnitIds = ids),
+          ),
           const SizedBox(height: 24),
           SectionHeader(
             title: strings.sectionScopeScale,
@@ -601,19 +715,81 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   prefixIcon: const Icon(Icons.location_on_outlined),
                 ),
               ),
-              TextFormField(
-                controller: _projectSizeController,
-                decoration: InputDecoration(
-                  labelText: strings.fieldProjectSize,
-                  helperText: strings.projectSizeHelper,
+              if (_projectType.isDigital)
+                TextFormField(
+                  controller: _usersScaleController,
+                  decoration: InputDecoration(
+                    labelText: strings.fieldUsersScale,
+                    helperText: strings.usersScaleHelper,
+                  ),
+                )
+              else
+                TextFormField(
+                  controller: _projectSizeController,
+                  decoration: InputDecoration(
+                    labelText: strings.fieldProjectSize,
+                    helperText: strings.projectSizeHelper,
+                  ),
                 ),
-              ),
             ],
           ),
+          if (_projectType.isDigital) ...[
+            const SizedBox(height: 12),
+            AdaptiveFieldRow(
+              children: [
+                TextFormField(
+                  controller: _techStackController,
+                  decoration: InputDecoration(
+                    labelText: strings.fieldTechStack,
+                    helperText: strings.techStackHelper,
+                  ),
+                ),
+                TextFormField(
+                  controller: _productUrlController,
+                  keyboardType: TextInputType.url,
+                  decoration: InputDecoration(
+                    labelText: strings.fieldProductUrl,
+                    prefixIcon: const Icon(Icons.link),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (_projectType == ProjectType.oilGasInspection) ...[
+            const SizedBox(height: 12),
+            AdaptiveFieldRow(
+              children: [
+                TextFormField(
+                  controller: _inspectionTypeController,
+                  decoration: InputDecoration(
+                    labelText: strings.fieldInspectionType,
+                  ),
+                ),
+                TextFormField(
+                  controller: _inspectionStandardController,
+                  decoration: InputDecoration(
+                    labelText: strings.fieldInspectionStandard,
+                    helperText: strings.inspectionStandardHelper,
+                  ),
+                ),
+                TextFormField(
+                  controller: _facilityController,
+                  decoration: InputDecoration(
+                    labelText: strings.fieldFacility,
+                    helperText: strings.facilityHelper,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           TextFormField(
             controller: _scopeOfWorksController,
-            decoration: InputDecoration(labelText: strings.fieldScopeOfWorks),
+            decoration: InputDecoration(
+              labelText: _projectType.isDigital
+                  ? strings.fieldFeaturesScope
+                  : strings.fieldScopeOfWorks,
+            ),
             maxLines: 6,
           ),
           const SizedBox(height: 12),
@@ -622,6 +798,14 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
             amountController: _contractValueController,
             onCurrencyChanged: (c) => setState(() => _currency = c),
           ),
+          if (_projectType.isDigital)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                strings.contractValueInHouseHelper,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
           const SizedBox(height: 24),
           SectionHeader(
             title: strings.sectionNotes,
@@ -636,9 +820,11 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
             const SizedBox(height: 24),
             _buildAiKnowledgeExtractionSection(strings, _loadedProject!),
           ],
+          // Past AND running work counts as experience (live in-house
+          // platforms, running pilots) — only planned work doesn't.
           if (_isEditing &&
               _loadedProject != null &&
-              _loadedProject!.status == ProjectStatus.past) ...[
+              _loadedProject!.status != ProjectStatus.planned) ...[
             const SizedBox(height: 24),
             SectionHeader(
               title: strings.projectSectionTitle,
@@ -681,6 +867,47 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
 /// Currency-selectable contract value amount, with live converted
 /// equivalents in the other supported currencies shown once an amount is
 /// entered. Conversion is display-only — never persisted.
+/// Business-unit chips, so each project counts toward the right unit.
+class _BusinessUnitChips extends ConsumerWidget {
+  const _BusinessUnitChips({required this.selected, required this.onChanged});
+
+  final Set<String> selected;
+  final ValueChanged<Set<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
+    final units = ref.watch(businessUnitsStreamProvider).value ?? const [];
+    if (units.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          strings.fieldBusinessUnits,
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (final bu in units)
+              FilterChip(
+                label: Text(bu.name),
+                selected: selected.contains(bu.id),
+                onSelected: (on) {
+                  final next = {...selected};
+                  on ? next.add(bu.id) : next.remove(bu.id);
+                  onChanged(next);
+                },
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _ContractValueField extends ConsumerStatefulWidget {
   const _ContractValueField({
     required this.currency,

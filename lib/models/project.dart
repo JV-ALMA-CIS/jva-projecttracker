@@ -80,6 +80,62 @@ extension ClientTypeX on ClientType {
   }
 }
 
+/// What kind of work a project is. Decides which fields the project form
+/// shows. Projects saved before this existed read as [construction], so
+/// they keep exactly the form and data they had.
+enum ProjectType {
+  construction,
+  itSoftware,
+  agritech,
+  facilityManagement,
+  oilGasInspection,
+}
+
+extension ProjectTypeX on ProjectType {
+  /// IT & Software and Agritech projects use the digital-project fields.
+  bool get isDigital =>
+      this == ProjectType.itSoftware || this == ProjectType.agritech;
+
+  static ProjectType fromString(String? value) {
+    for (final ProjectType t in ProjectType.values) {
+      if (t.name == value) return t;
+    }
+    return ProjectType.construction;
+  }
+}
+
+/// Category for IT & Software / Agritech projects.
+enum DigitalCategory {
+  softwarePlatform,
+  mobileApp,
+  gisSatellite,
+  aiAnalytics,
+  iot,
+  systemsIntegration,
+}
+
+extension DigitalCategoryX on DigitalCategory {
+  static DigitalCategory? fromString(String? value) {
+    for (final DigitalCategory c in DigitalCategory.values) {
+      if (c.name == value) return c;
+    }
+    return null;
+  }
+}
+
+/// How a digital project was delivered — in place of the construction
+/// "contractor role".
+enum DeliveryModel { inHouseProduct, clientContract, pilotPartnership }
+
+extension DeliveryModelX on DeliveryModel {
+  static DeliveryModel? fromString(String? value) {
+    for (final DeliveryModel m in DeliveryModel.values) {
+      if (m.name == value) return m;
+    }
+    return null;
+  }
+}
+
 class Project {
   final String id;
   final String name;
@@ -193,6 +249,29 @@ class Project {
   /// per lesson) while still promoting to at most one Experience record.
   final List<String> knowledgeArticleIds;
 
+  // --- Project type (IT, agritech, oil & gas fields) ---
+
+  /// What kind of work this is — see [ProjectType]. Construction by default.
+  final ProjectType projectType;
+
+  /// IT & Software / Agritech only.
+  final DigitalCategory? digitalCategory;
+  final DeliveryModel? deliveryModel;
+
+  /// Technologies used, e.g. ["Flutter", "Firebase", "Vertex AI"].
+  final List<String> techStack;
+
+  /// Play Store / website link for a digital product.
+  final String productUrl;
+
+  /// Users or scale of a digital project, e.g. "1,200 farmers".
+  final String usersScale;
+
+  /// Oil & Gas Inspection only.
+  final String inspectionType;
+  final String inspectionStandard;
+  final String facility;
+
   const Project({
     required this.id,
     required this.name,
@@ -228,6 +307,15 @@ class Project {
     this.forecastAmount,
     this.lessonsLearned = '',
     this.knowledgeArticleIds = const [],
+    this.projectType = ProjectType.construction,
+    this.digitalCategory,
+    this.deliveryModel,
+    this.techStack = const [],
+    this.productUrl = '',
+    this.usersScale = '',
+    this.inspectionType = '',
+    this.inspectionStandard = '',
+    this.facility = '',
   });
 
   factory Project.fromMap(String id, Map<String, dynamic> map) {
@@ -281,6 +369,17 @@ class Project {
       knowledgeArticleIds: List<String>.from(
         map['knowledgeArticleIds'] as List? ?? const [],
       ),
+      projectType: ProjectTypeX.fromString(map['projectType'] as String?),
+      digitalCategory: DigitalCategoryX.fromString(
+        map['digitalCategory'] as String?,
+      ),
+      deliveryModel: DeliveryModelX.fromString(map['deliveryModel'] as String?),
+      techStack: List<String>.from(map['techStack'] as List? ?? const []),
+      productUrl: map['productUrl'] as String? ?? '',
+      usersScale: map['usersScale'] as String? ?? '',
+      inspectionType: map['inspectionType'] as String? ?? '',
+      inspectionStandard: map['inspectionStandard'] as String? ?? '',
+      facility: map['facility'] as String? ?? '',
     );
   }
 
@@ -319,6 +418,15 @@ class Project {
       'forecastAmount': forecastAmount,
       'lessonsLearned': lessonsLearned,
       'knowledgeArticleIds': knowledgeArticleIds,
+      'projectType': projectType.name,
+      'digitalCategory': digitalCategory?.name,
+      'deliveryModel': deliveryModel?.name,
+      'techStack': techStack,
+      'productUrl': productUrl,
+      'usersScale': usersScale,
+      'inspectionType': inspectionType,
+      'inspectionStandard': inspectionStandard,
+      'facility': facility,
     };
   }
 
@@ -356,6 +464,15 @@ class Project {
     bool clearForecastAmount = false,
     String? lessonsLearned,
     List<String>? knowledgeArticleIds,
+    ProjectType? projectType,
+    DigitalCategory? digitalCategory,
+    DeliveryModel? deliveryModel,
+    List<String>? techStack,
+    String? productUrl,
+    String? usersScale,
+    String? inspectionType,
+    String? inspectionStandard,
+    String? facility,
   }) {
     return Project(
       id: id,
@@ -405,6 +522,15 @@ class Project {
           : (forecastAmount ?? this.forecastAmount),
       lessonsLearned: lessonsLearned ?? this.lessonsLearned,
       knowledgeArticleIds: knowledgeArticleIds ?? this.knowledgeArticleIds,
+      projectType: projectType ?? this.projectType,
+      digitalCategory: digitalCategory ?? this.digitalCategory,
+      deliveryModel: deliveryModel ?? this.deliveryModel,
+      techStack: techStack ?? this.techStack,
+      productUrl: productUrl ?? this.productUrl,
+      usersScale: usersScale ?? this.usersScale,
+      inspectionType: inspectionType ?? this.inspectionType,
+      inspectionStandard: inspectionStandard ?? this.inspectionStandard,
+      facility: facility ?? this.facility,
     );
   }
 }
