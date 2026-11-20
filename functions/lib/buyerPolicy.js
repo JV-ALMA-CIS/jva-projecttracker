@@ -6,10 +6,6 @@
  * tender is donor-funded (World Bank, AfDB, EU, ...), which is kept even if
  * a government agency runs the procurement.
  *
- * Exception (user, 2026-11-20): the national oil companies of Uganda (UNOC)
- * and Tanzania (TPDC) are kept — oil & gas inspection work. Kenya's KPC and
- * Kenya Petroleum Refineries stay excluded like other Kenyan state bodies.
- *
  * Always kept: grants / programmes, embassy & foreign-mission work, donors,
  * UN agencies, NGOs, private companies, and anything a colleague added by
  * hand (a person already judged it worth a look).
@@ -31,16 +27,6 @@ const DONOR_PATTERNS = [
   /\b(financed|funded|co-financed|supported) by\b/i,
   /\b(credit|loan|grant) (no\.?|number)\b/i,
 ];
-
-/** State buyers the company DOES pursue despite the rule above. */
-const ALLOWED_STATE_BUYERS = [
-  /\bUNOC\b|uganda national oil company/i,
-  /\bTPDC\b|tanzania petroleum development corporation/i,
-];
-
-function isAllowedStateBuyer(text) {
-  return ALLOWED_STATE_BUYERS.some((p) => p.test(String(text || "")));
-}
 
 function isDonorFunded(text) {
   return DONOR_PATTERNS.some((p) => p.test(String(text || "")));
@@ -66,9 +52,6 @@ function ruleDecision(o) {
     return { exclude: false, reason: "foreign mission" };
   }
   if (isDonorFunded(opportunityText(o))) return { exclude: false, reason: "donor-funded" };
-  if (isAllowedStateBuyer(`${o.title || ""} ${o.client || ""} ${o.procuringOrganization || ""}`)) {
-    return { exclude: false, reason: "allowed state buyer (UNOC / TPDC)" };
-  }
   if (tags.includes("ppip")) return { exclude: true, reason: "Kenyan public procurement portal" };
   if (o.tenderSourceCategory === "countyGovernment") return { exclude: true, reason: "county government" };
   if (["developmentPartner", "unAgency", "ngo", "privateSector", "customEnterprise"].includes(o.tenderSourceCategory)) {
@@ -149,4 +132,4 @@ function archiveUpdate(reason, timestamp) {
   };
 }
 
-module.exports = { isDonorFunded, isAllowedStateBuyer, ruleDecision, decideBuyers, buildBuyerPrompt, archiveUpdate, PUBLIC_BUYER_TYPES };
+module.exports = { isDonorFunded, ruleDecision, decideBuyers, buildBuyerPrompt, archiveUpdate, PUBLIC_BUYER_TYPES };

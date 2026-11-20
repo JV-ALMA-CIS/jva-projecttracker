@@ -196,11 +196,8 @@ BUYERS — skip tenders whose buyer is a Kenyan or East African public body
 (national government, ministries, counties, state corporations such as
 KETRACO or KPLC, public water companies, NG-CDF, public universities,
 colleges or hospitals) UNLESS the tender states it is donor-funded (World
-Bank, AfDB, EU, a UN agency, a bilateral donor). Exception: oil & gas tenders
-from UNOC (Uganda National Oil Company) and TPDC (Tanzania Petroleum
-Development Corporation) ARE wanted; Kenya's KPC and Kenya Petroleum
-Refineries are not. Prefer embassies, donors, UN agencies, NGOs and private
-companies.
+Bank, AfDB, EU, a UN agency, a bilateral donor). Prefer embassies, donors,
+UN agencies, NGOs and private companies.
 `;
 }
 
@@ -542,7 +539,7 @@ const TENDER_FOCUS_AREAS = [
   // Oil & gas inspection — three focused searches (one broad search found
   // almost no real inspection work).
   "oil & gas INSPECTION services in Kenya: storage-tank inspection (API 653) and tank calibration, pressure-vessel and piping inspection (API 510 / 570), NDT, pipeline integrity and cathodic-protection surveys at petroleum depots, LPG plants and retail fuel stations — buyers such as Vivo Energy, Rubis, TotalEnergies Marketing Kenya, Ola Energy, Gulf Energy, Hass Petroleum, LPG distributors and terminal operators",
-  "upstream and midstream oil & gas inspection, QA/QC, NDT, HSE audit and maintenance tenders and subcontracts in Uganda and Tanzania — UNOC (Uganda National Oil Company), TPDC (Tanzania Petroleum Development Corporation), EACOP pipeline, Tilenga (TotalEnergies EP Uganda), Kingfisher (CNOOC Uganda), Hoima refinery and Tanzania LNG / gas projects, including their main contractors' local-content subcontract notices",
+  "upstream and midstream oil & gas inspection, QA/QC, NDT, HSE audit and maintenance subcontracts in Uganda and Tanzania — EACOP pipeline, Tilenga (TotalEnergies EP Uganda), Kingfisher (CNOOC Uganda), Hoima refinery and Tanzania LNG / gas projects, including their main contractors' local-content subcontract notices",
   "third-party inspection, certification and testing tenders for fuel and gas equipment in East Africa: weighbridge and flow-meter calibration, LPG cylinder testing, fire-suppression and gas-detection system inspection, statutory inspection of lifting equipment and pressure systems, environmental and safety compliance audits for petroleum facilities",
   "ICT, software development, digital platforms, GIS / mapping and data systems tenders and consultancies by donors, UN agencies, NGOs and private companies in Kenya and East Africa",
   "human resources consultancy, recruitment, payroll and staffing services tenders by NGOs, UN agencies and private companies in Kenya",

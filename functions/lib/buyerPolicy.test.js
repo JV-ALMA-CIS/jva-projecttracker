@@ -37,6 +37,16 @@ const tender = (o) => ({ kind: "tender", title: "Some tender", ...o });
     assert.equal(ruleDecision(tender({ tags: ["ppip"], title: "Water works financed by the World Bank" })).exclude, false);
   });
 
+  await test("state oil companies are public buyers too: KPC, KPRL, UNOC, TPDC excluded (user, 2026-11-20)", async () => {
+    for (const client of ["Kenya Pipeline Company", "Kenya Petroleum Refineries", "Uganda National Oil Company (UNOC)", "TPDC"]) {
+      assert.equal(ruleDecision(tender({ client, tags: ["ppip"], title: "Tank inspection" })).exclude, true, client);
+    }
+    const [unoc] = await decideBuyers([tender({ client: "UNOC", title: "Pipeline NDT services" })], {
+      classify: async () => [{ index: 0, buyerType: "eastAfricaPublic", donorFunded: false }],
+    });
+    assert.equal(unoc.exclude, true);
+  });
+
   await test("rules: PPIP and county tenders are excluded", () => {
     assert.equal(ruleDecision(tender({ tags: ["ppip"], client: "Murang'a Water and Sanitation Co." })).exclude, true);
     assert.equal(ruleDecision(tender({ tenderSourceCategory: "countyGovernment" })).exclude, true);
@@ -139,12 +149,6 @@ const tender = (o) => ({ kind: "tender", title: "Some tender", ...o });
     assert.equal(update.status, "archived");
     assert.equal(update.archivedReason, "publicBuyer");
     assert.equal(db.updates.some(([i]) => i === "grant1" || i === "ngo1"), false);
-  });
-
-  await test("UNOC and TPDC oil & gas tenders are kept; KPC and Kenya Petroleum Refineries are not", async () => {
-    assert.equal(ruleDecision({ kind: "tender", title: "Routine inspection of storage tanks", client: "Uganda National Oil Company (UNOC)", tags: ["ppip"] }).exclude, false);
-    assert.equal(ruleDecision({ kind: "tender", title: "NDT services", client: "TPDC", tenderSourceCategory: "governmentAgency" }).exclude, false);
-    assert.equal(ruleDecision({ kind: "tender", title: "Tank calibration", client: "Kenya Pipeline Company", tags: ["ppip"] }).exclude, true);
   });
 
   console.log(`\n${passed} test(s) passed`);
