@@ -141,5 +141,11 @@ const tender = (o) => ({ kind: "tender", title: "Some tender", ...o });
     assert.equal(db.updates.some(([i]) => i === "grant1" || i === "ngo1"), false);
   });
 
+  await test("UNOC and TPDC oil & gas tenders are kept; KPC and Kenya Petroleum Refineries are not", async () => {
+    assert.equal(ruleDecision({ kind: "tender", title: "Routine inspection of storage tanks", client: "Uganda National Oil Company (UNOC)", tags: ["ppip"] }).exclude, false);
+    assert.equal(ruleDecision({ kind: "tender", title: "NDT services", client: "TPDC", tenderSourceCategory: "governmentAgency" }).exclude, false);
+    assert.equal(ruleDecision({ kind: "tender", title: "Tank calibration", client: "Kenya Pipeline Company", tags: ["ppip"] }).exclude, true);
+  });
+
   console.log(`\n${passed} test(s) passed`);
 })();

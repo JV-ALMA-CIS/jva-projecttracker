@@ -290,8 +290,11 @@ BUYERS — skip tenders whose buyer is a Kenyan or East African public body
 (national government, ministries, counties, state corporations such as
 KETRACO or KPLC, public water companies, NG-CDF, public universities,
 colleges or hospitals) UNLESS the tender states it is donor-funded (World
-Bank, AfDB, EU, a UN agency, a bilateral donor). Prefer embassies, donors,
-UN agencies, NGOs and private companies.
+Bank, AfDB, EU, a UN agency, a bilateral donor). Exception: oil & gas tenders
+from UNOC (Uganda National Oil Company) and TPDC (Tanzania Petroleum
+Development Corporation) ARE wanted; Kenya's KPC and Kenya Petroleum
+Refineries are not. Prefer embassies, donors, UN agencies, NGOs and private
+companies.
 
 CRITICAL — "sourceUrl" must be a direct, real, publicly loadable link to the
 actual tender/opportunity page as it appears in the address bar of the site
