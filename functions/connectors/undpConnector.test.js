@@ -4,7 +4,7 @@
  */
 const assert = require("node:assert/strict");
 const { parseUndpDeadline, parseNotices } = require("./undpConnector");
-const { checkTenderPage, TENDER_PAGES } = require("../tenderPageWatchlist");
+const { checkTenderPage, TENDER_PAGES, isEastAfricanTender } = require("../tenderPageWatchlist");
 const { isAllowedGrantCandidate } = require("../opportunityRelevance");
 
 let passed = 0;
@@ -134,6 +134,29 @@ const row = ({ href = "view_negotiation.cfm?nego_id=51608", title, ref = "UNDP-K
     const r = await checkTenderPage(page, { db, extract: more, fetchImpl: fetchOk("<main>v2</main>"), now: NOW });
     assert.equal(r.created, 1);
     assert.equal(db.opportunities[1].scoreQuietly, undefined);
+  });
+
+  await test("tender pages keep only Kenya / East Africa (EEAS lists delegations worldwide)", async () => {
+    const eeas = TENDER_PAGES.find((p) => p.key === "eu-delegation-kenya");
+    assert.equal(isEastAfricanTender({ name: "Office renovation", country: "Kenya" }, eeas), true);
+    assert.equal(isEastAfricanTender({ name: "Security services", country: "Serbia" }, eeas), false);
+    assert.equal(isEastAfricanTender({ name: "Pest control services", country: "" }, eeas), false);
+    assert.equal(isEastAfricanTender({ name: "Cleaning of Nairobi offices", country: "" }, eeas), true);
+    assert.equal(isEastAfricanTender({ name: "Cleaning services", country: "" }, page), true, "local page");
+    const db = fakeDb();
+    const r = await checkTenderPage(eeas, {
+      db,
+      extract: async () => ({
+        calls: [
+          { name: "Renovation of EU Delegation offices", deadline: "2026-12-15", country: "Kenya" },
+          { name: "Vehicles for the Delegation to Myanmar", deadline: "2026-12-15", country: "Myanmar" },
+        ],
+      }),
+      fetchImpl: fetchOk("<main>eeas</main>"),
+      now: NOW,
+    });
+    assert.equal(r.created, 1);
+    assert.equal(db.opportunities[0].title, "Renovation of EU Delegation offices");
   });
 
   await test("every tender page has a key, https url, client and buyer category", () => {

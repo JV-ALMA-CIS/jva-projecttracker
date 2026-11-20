@@ -129,7 +129,10 @@ Return ONLY a JSON object:
   "eligibility": "eligible" | "needsPartner" | "notEligible" | "unclear",
   "eligibilityNote": string (max 160 chars, plain words, e.g. "For-profit SMEs in Kenya eligible; needs 25% matching funds"),
   "fundingAmount": string (grant amount / range, or for a tender the stated contract value or budget, with currency, e.g. "US$20,000" or "£100,000–£250,000"; "" if not stated),
-  "matchFunding": string (co-funding / matching requirement, e.g. "25% matching funds"; "" if none stated)
+  "matchFunding": string (co-funding / matching requirement, e.g. "25% matching funds"; "" if none stated),
+  "fitScorePercent": number (0-100: how well this matches what the company actually does — its business
+    units, its own platforms and its past projects; 0-30 for work outside its fields, e.g. health
+    services, charities' own programmes, vehicles, catering, events)
 }
 No commentary, no markdown fences.`;
 }
@@ -143,7 +146,15 @@ function parseEligibility(parsed) {
     eligibilityNote: str(p.eligibilityNote, 200),
     fundingAmount: str(p.fundingAmount, 80),
     matchFunding: str(p.matchFunding, 120),
+    eligibilityFitScore: Number.isFinite(Number(p.fitScorePercent))
+      ? Math.max(0, Math.min(100, Math.round(Number(p.fitScorePercent))))
+      : null,
   };
+}
+
+/** True when nothing has scored [opportunity] yet (e.g. funder-watchlist calls). */
+function isUnscored(opportunity) {
+  return typeof opportunity?.overallMatchScore !== "number" && !(opportunity?.fitScorePercent > 0);
 }
 
 /**
@@ -194,6 +205,10 @@ async function computeEligibility(opportunity, { extract, facts, text, fetchImpl
 /** Checks one stored opportunity and writes the result onto it. Returns the fields. */
 async function assessEligibility(ref, opportunity, { extract, facts, now }) {
   const fields = await computeEligibility(opportunity, { extract, facts, now });
+  // Nothing scored it yet: use the check's fit score so it ranks.
+  if (isUnscored(opportunity) && typeof fields.eligibilityFitScore === "number") {
+    fields.fitScorePercent = fields.eligibilityFitScore;
+  }
   await ref.update(fields);
   logger.info(`grantEligibility: ${ref.id} → ${fields.eligibility} (${fields.eligibilityNote})`);
   return fields;
@@ -231,6 +246,7 @@ module.exports = {
   buildEligibilityPrompt,
   parseEligibility,
   needsEligibilityCheck,
+  isUnscored,
   computeEligibility,
   assessEligibility,
   runEligibilityBackfill,

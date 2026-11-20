@@ -250,7 +250,10 @@ const pageFetch = (html) => async () => ({ ok: true, status: 200, text: async ()
       eligibilityNote: "EU consortium",
       fundingAmount: "€2m",
       matchFunding: "",
+      eligibilityFitScore: null,
     });
+    assert.equal(parseEligibility({ eligibility: "eligible", fitScorePercent: 140 }).eligibilityFitScore, 100);
+    assert.equal(parseEligibility({ eligibility: "eligible", fitScorePercent: "72" }).eligibilityFitScore, 72);
     assert.equal(parseEligibility({ eligibility: "maybe" }).eligibility, "unclear");
     assert.equal(parseEligibility(null).eligibility, "unclear");
   });

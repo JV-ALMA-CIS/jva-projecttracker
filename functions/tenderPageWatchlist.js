@@ -5,6 +5,7 @@ const { fetchPageImpl } = require("./lib/fetchPage");
 const { mainText, hashText } = require("./callPageWatcher");
 const { openCalls, isSameCall } = require("./funderWatchlist");
 const { outOfScopeReason } = require("./lib/scopePolicy");
+const { isAllowedCountry } = require("./opportunityRelevance");
 
 /**
  * Tender page watchlist: pages where a buyer lists its own open tenders as
@@ -33,6 +34,8 @@ const TENDER_PAGES = [
     name: "Italian Embassy Nairobi",
     client: "Embassy of Italy, Nairobi",
     tenderSourceCategory: "governmentAgency",
+    // Everything on this page is for Nairobi unless it says otherwise.
+    local: true,
   },
   {
     key: "eu-delegation-kenya",
@@ -47,10 +50,27 @@ const TENDER_PAGES = [
     name: "Kenya Red Cross",
     client: "Kenya Red Cross Society",
     tenderSourceCategory: "ngo",
+    local: true,
   },
 ];
 
 const STATE_COLLECTION = "watchedTenderPages";
+
+const ALLOWED_COUNTRIES = new Set(["kenya", "uganda", "tanzania", "rwanda", "burundi"]);
+
+/**
+ * Pure: only tenders delivered in Kenya, Uganda, Tanzania, Rwanda or
+ * Burundi. EEAS lists EU Delegation tenders worldwide (Serbia, Zimbabwe,
+ * Paraguay, ...), so the AI's stated country decides; with no country
+ * stated, a "local" page's tender counts as local and any other needs a
+ * place name in its own title/summary.
+ */
+function isEastAfricanTender(call, page) {
+  const country = String(call?.country || "").trim().toLowerCase();
+  if (country) return [...ALLOWED_COUNTRIES].some((c) => country.includes(c));
+  if (page.local) return true;
+  return isAllowedCountry({ title: call?.name, description: call?.summary });
+}
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
 
@@ -75,6 +95,7 @@ Return ONLY a JSON object:
       "deadline": string (ISO 8601 date of the submission deadline),
       "rolling": false,
       "applyUrl": string (link to the tender's own page if shown; "" if not),
+      "country": string (the country where the work / service is delivered, e.g. "Kenya"; "" if not stated),
       "summary": string (1-2 sentences: what is being bought, where, any key requirement)
     }
   ]
@@ -102,7 +123,11 @@ async function checkTenderPage(page, { db, extract, fetchImpl = fetchPageImpl, n
   }
   const firstLook = !state.contentHash;
 
-  const calls = openCalls(page, await extract(buildTendersPrompt(page, text, now)), now).filter((c) => !c.rolling);
+  const extraction = await extract(buildTendersPrompt(page, text, now));
+  const inRegion = (Array.isArray(extraction?.calls) ? extraction.calls : []).filter((c) =>
+    isEastAfricanTender(c, page),
+  );
+  const calls = openCalls(page, { calls: inRegion }, now).filter((c) => !c.rolling);
   let created = 0;
   for (const call of calls) {
     if (outOfScopeReason({ title: call.name })) continue;
@@ -160,6 +185,7 @@ async function checkAllTenderPages(deps) {
 
 module.exports = {
   TENDER_PAGES,
+  isEastAfricanTender,
   buildTendersPrompt,
   checkTenderPage,
   checkAllTenderPages,

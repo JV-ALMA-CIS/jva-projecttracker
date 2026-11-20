@@ -66,13 +66,6 @@ const FUNDER_PAGES = [
     kind: "grant",
   },
   {
-    key: "d-prize",
-    url: "https://www.d-prize.org/",
-    name: "D-Prize",
-    client: "D-Prize",
-    kind: "grant",
-  },
-  {
     key: "google-startups-africa",
     url: "https://startup.google.com/programs/accelerator/africa/",
     name: "Google for Startups Accelerator: Africa",
@@ -295,7 +288,7 @@ async function checkFunderPage(
       sourceUrlVerifiedAt: ts,
       sourceUrlIsFallback: false,
       status: "discovered",
-      fitScorePercent: 0,
+      fitScorePercent: typeof eligibility.eligibilityFitScore === "number" ? eligibility.eligibilityFitScore : 0,
       fitReasoning: `On the funder watchlist — ${page.name}.`,
       tags: ["funder-watchlist", page.key, ...(call.rolling ? ["rolling"] : [])],
       rolling: call.rolling,

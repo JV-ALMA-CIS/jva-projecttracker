@@ -1721,6 +1721,11 @@ exports.scheduledBusinessUnitBackfill = onSchedule(
     } catch (e) {
       logger.error("scope policy clean-up failed", e);
     }
+    try {
+      await applyRelevanceCleanupIfChanged();
+    } catch (e) {
+      logger.error("relevance clean-up failed", e);
+    }
     // Same background slot: eligibility for grants not checked yet (older
     // ones, or ones whose check failed at creation).
     try {
@@ -1740,6 +1745,7 @@ exports.runBusinessUnitBackfillNow = onCall({ timeoutSeconds: 540 }, async () =>
 // Grant eligibility — see grantEligibility.js.
 const {
   needsEligibilityCheck,
+  isUnscored,
   assessEligibility,
   loadCompanyFacts,
   runEligibilityBackfill,
@@ -1815,6 +1821,85 @@ async function applyScopePolicyIfChanged() {
     { merge: true },
   );
   return result;
+}
+
+/** Below this match score an opportunity is archived as a poor fit. */
+const LOW_FIT_ARCHIVE_BELOW = 35;
+
+function relevanceArchiveUpdate(reason, detail, timestamp) {
+  return {
+    status: "archived",
+    archivedReason: reason,
+    archivedReasonDetail: detail,
+    archivedAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const LOCAL_TENDER_PAGES = new Set(["italian-embassy-nairobi", "kenya-red-cross"]);
+
+/**
+ * Pure: why an open Inbox item should be archived by the one-time
+ * relevance clean-up, or null to keep it. (Archived, never deleted.)
+ */
+function relevanceCleanupReason(o, now = new Date()) {
+  if (o.addedByUid) return null; // a colleague chose it
+  const tags = Array.isArray(o.tags) ? o.tags : [];
+  if (tags.includes("d-prize")) return ["notRelevant", "D-Prize challenges are for new charities"];
+  if (
+    tags.includes("tender-page") &&
+    !tags.some((t) => LOCAL_TENDER_PAGES.has(t)) &&
+    !isAllowedCountry({ title: o.title, description: o.description })
+  ) {
+    return ["outOfRegion", "not in Kenya / East Africa"];
+  }
+  const score = typeof o.overallMatchScore === "number" ? o.overallMatchScore : o.fitScorePercent || 0;
+  if (score > 0 && score < LOW_FIT_ARCHIVE_BELOW) return ["lowFit", `match ${score}%`];
+  const found = o.discoveredAt?.toDate ? o.discoveredAt.toDate() : o.discoveredAt ? new Date(o.discoveredAt) : null;
+  if (!o.deadline && found && now - found > 60 * DAY_MS) return ["stale", "no deadline, found over 60 days ago"];
+  return null;
+}
+
+/**
+ * One-time (versioned) clean-up of the open Inbox: archives what
+ * relevanceCleanupReason flags, and re-queues unscored grants for the
+ * eligibility check so they get a fit score. Returns counts.
+ */
+const RELEVANCE_CLEANUP_VERSION = 1;
+
+async function applyRelevanceCleanupIfChanged(now = new Date()) {
+  const marker = db.collection("companySettings").doc("relevanceCleanup");
+  if ((await marker.get()).data()?.appliedVersion === RELEVANCE_CLEANUP_VERSION) return null;
+  const snap = await db.collection("opportunities").where("status", "==", "discovered").get();
+  const ts = admin.firestore.Timestamp.fromDate(now);
+  const counts = {};
+  let requeued = 0;
+  let batch = db.batch();
+  let pending = 0;
+  for (const doc of snap.docs) {
+    const o = doc.data();
+    const hit = relevanceCleanupReason(o, now);
+    if (hit) {
+      batch.update(doc.ref, relevanceArchiveUpdate(hit[0], hit[1], ts));
+      counts[hit[0]] = (counts[hit[0]] || 0) + 1;
+    } else if ((o.kind === "grant" || o.kind === "programme") && isUnscored(o) && o.eligibilityCheckedAt) {
+      batch.update(doc.ref, { eligibilityCheckedAt: admin.firestore.FieldValue.delete() });
+      requeued += 1;
+    } else {
+      continue;
+    }
+    pending += 1;
+    if (pending === 400) {
+      await batch.commit();
+      batch = db.batch();
+      pending = 0;
+    }
+  }
+  if (pending > 0) await batch.commit();
+  await marker.set({ appliedVersion: RELEVANCE_CLEANUP_VERSION, appliedAt: ts, archived: counts, requeued }, { merge: true });
+  logger.info(`relevance clean-up: archived ${JSON.stringify(counts)}, re-queued ${requeued} unscored grants`);
+  return { archived: counts, requeued };
 }
 
 /** Callable (signed-in): archiveOutOfScope -> {archived, titles} — re-applies the scope rules now. */
@@ -4063,6 +4148,13 @@ async function alertOrScoreNewOpportunity(event, opportunity, opportunityId) {
     logger.info(
       `onOpportunityCreated: auto-scored ${opportunityId} at ${result.overallMatchScore ?? "n/a"}%`,
     );
+    // A poor fit isn't worth anyone's time: archived (never deleted).
+    if (typeof result.overallMatchScore === "number" && result.overallMatchScore < LOW_FIT_ARCHIVE_BELOW) {
+      await event.data.ref.update(
+        relevanceArchiveUpdate("lowFit", `match ${result.overallMatchScore}%`, admin.firestore.Timestamp.now()),
+      );
+      logger.info(`onOpportunityCreated: archived ${opportunityId} — low fit (${result.overallMatchScore}%)`);
+    }
   } catch (e) {
     logger.error(`onOpportunityCreated: auto Match Analysis failed for ${opportunityId}`, e);
   }
