@@ -526,6 +526,36 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _buildSourceOpportunityBanner(strings),
+          // First question on the form: the rest of the form adapts to it
+          // (IT / agritech / oil & gas fields), so it must be impossible to miss.
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    strings.projectTypeQuestion,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final ProjectType t in ProjectType.values)
+                        ChoiceChip(
+                          label: Text(strings.projectTypeLabel(t)),
+                          selected: _projectType == t,
+                          onSelected: (_) => setState(() => _projectType = t),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           SectionHeader(
             title: strings.sectionDetails,
             accentColor: AppStatusColors.operations,
@@ -559,21 +589,6 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
             title: strings.sectionClassification,
             accentColor: AppStatusColors.operations,
           ),
-          DropdownButtonFormField<ProjectType>(
-            key: ValueKey('projectType-$_projectType'),
-            initialValue: _projectType,
-            decoration: InputDecoration(labelText: strings.fieldProjectType),
-            items: ProjectType.values
-                .map(
-                  (t) => DropdownMenuItem(
-                    value: t,
-                    child: Text(strings.projectTypeLabel(t)),
-                  ),
-                )
-                .toList(),
-            onChanged: (v) => setState(() => _projectType = v ?? _projectType),
-          ),
-          const SizedBox(height: 16),
           AdaptiveFieldRow(
             children: [
               if (_projectType.isDigital)

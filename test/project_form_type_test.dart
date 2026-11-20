@@ -49,19 +49,14 @@ void main() {
         'to the IT fields', (tester) async {
       await _pump(tester, size);
 
-      await tester.scrollUntilVisible(
-        find.text(_strings.fieldProjectType),
-        200,
-        scrollable: find.byType(Scrollable).first,
+      // The type question is the first thing on the form — no scrolling.
+      expect(find.text(_strings.projectTypeQuestion), findsOneWidget);
+      expect(
+        find.text(_strings.projectTypeLabel(ProjectType.itSoftware)),
+        findsOneWidget,
       );
-      expect(find.text(_strings.fieldProjectType), findsOneWidget);
-
       await tester.tap(
-        find.text(_strings.projectTypeLabel(ProjectType.construction)),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.text(_strings.projectTypeLabel(ProjectType.itSoftware)).last,
+        find.text(_strings.projectTypeLabel(ProjectType.itSoftware)),
       );
       await tester.pumpAndSettle();
 

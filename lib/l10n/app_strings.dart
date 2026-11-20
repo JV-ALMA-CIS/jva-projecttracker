@@ -1521,6 +1521,8 @@ class AppStrings {
       _it ? 'Cofinanziamento: $text' : 'Co-funding: $text';
   // Project types (construction / IT / agritech / FM / oil & gas)
   String get fieldProjectType => _it ? 'Tipo di progetto' : 'Project type';
+  String get projectTypeQuestion =>
+      _it ? 'Che tipo di progetto è?' : 'What kind of project is this?';
   String projectTypeLabel(ProjectType t) => switch (t) {
     ProjectType.construction =>
       _it ? 'Costruzioni e lavori' : 'Construction & Works',
