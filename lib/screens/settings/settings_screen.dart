@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jva_projecttracker/app_version.dart';
 import 'package:jva_projecttracker/l10n/app_strings.dart';
 import 'package:jva_projecttracker/models/device_registration.dart';
 import 'package:jva_projecttracker/models/user_profile.dart';
@@ -201,6 +202,13 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              strings.appVersionLabel(kAppVersion),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
         ],

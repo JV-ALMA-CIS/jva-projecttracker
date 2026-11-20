@@ -1576,6 +1576,8 @@ class AppStrings {
       : 'e.g. depot, LPG plant, station';
   String get fieldBusinessUnits => _it ? 'Unità di business' : 'Business units';
 
+  String appVersionLabel(String v) =>
+      _it ? 'Versione app $v' : 'App version $v';
   String get openOfficialPageButton =>
       _it ? 'Apri la pagina ufficiale' : 'Open the official page';
   String get openPageShort => _it ? 'Apri pagina' : 'Open page';
